@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64"><Configuration>Debug</Configuration><Platform>x64</Platform></ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64"><Configuration>Release</Configuration><Platform>x64</Platform></ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{52D5578C-6E72-4BC2-9BCA-362193C9633D}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <RootNamespace>NppTerminalBrokerTests</RootNamespace>
+    <ProjectName>NppTerminalBroker.Tests</ProjectName>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <OutDir>$(SolutionDir)out\x64\Debug\</OutDir>
+    <IntDir>$(SolutionDir)out\obj\NppTerminalBroker.Tests\Debug\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <OutDir>$(SolutionDir)out\x64\Release\</OutDir>
+    <IntDir>$(SolutionDir)out\obj\NppTerminalBroker.Tests\Release\</IntDir>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings" />
+  <ImportGroup Label="PropertySheets" />
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup><TargetName>NppTerminalBroker.Tests</TargetName><LinkIncremental>false</LinkIncremental></PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <WarningLevel>Level4</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;UNICODE;_UNICODE;_WIN32_WINNT=0x0A00;WINVER=0x0A00;WIN32_LEAN_AND_MEAN;NOMINMAX;NPPTERMINAL_TESTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir)src;$(ProjectDir)third_party\notepadpp;$(ProjectDir)third_party\json\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <TreatWarningAsError>false</TreatWarningAsError>
+      <ConformanceMode>true</ConformanceMode>
+      <RuntimeLibrary Condition="'$(Configuration)'=='Debug'">MultiThreadedDebug</RuntimeLibrary>
+      <RuntimeLibrary Condition="'$(Configuration)'=='Release'">MultiThreaded</RuntimeLibrary>
+    </ClCompile>
+    <ResourceCompile>
+      <AdditionalIncludeDirectories>$(ProjectDir)src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>NPPTERMINAL_TESTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ResourceCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation Condition="'$(Configuration)'=='Debug'">true</GenerateDebugInformation>
+      <AdditionalDependencies>user32.lib;kernel32.lib;shell32.lib;uuid.lib;version.lib;advapi32.lib;ole32.lib;bcrypt.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="src\TerminalSession.h" />
+    <ClInclude Include="src\BrokerSession.h" />
+    <ClInclude Include="src\BrokerProtocol.h" />
+    <ClInclude Include="src\ProfileCleanup.h" />
+    <ClInclude Include="src\Version.h" />
+    <ClInclude Include="src\ShellCatalog.h" />
+    <ClInclude Include="src\DirectoryResolver.h" />
+    <ClInclude Include="src\ShellDiscovery.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="src\BrokerSession.cpp" />
+    <ClCompile Include="src\BrokerProtocol.cpp" />
+    <ClCompile Include="src\ProfileCleanup.cpp" />
+    <ClCompile Include="src\Protocol.cpp" />
+    <ClCompile Include="src\BrokerMain.cpp" />
+    <ClCompile Include="src\ShellCatalog.cpp" />
+    <ClCompile Include="src\DirectoryResolver.cpp" />
+    <ClCompile Include="src\ShellDiscovery.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="src\Broker.rc" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

@@ -1,0 +1,10 @@
+.cache/
+packages/
+out/
+obj/
+.vs/
+web/node_modules/
+web/vendor/
+*.user
+*.VC.db
+*.obj

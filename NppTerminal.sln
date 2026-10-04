@@ -1,0 +1,39 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NppTerminal", "NppTerminal.vcxproj", "{4A6C9BB0-1F8A-4BC1-B99C-BD9F5C98D1E6}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NppTerminal.Tests", "NppTerminal.Tests.vcxproj", "{C1D8BD52-3F06-4AE2-8A57-66EE5D5C7A6A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NppTerminalBroker", "NppTerminalBroker.vcxproj", "{9635A87A-059D-48D1-A127-6C5A88BBD598}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NppTerminalBroker.Tests", "NppTerminalBroker.Tests.vcxproj", "{52D5578C-6E72-4BC2-9BCA-362193C9633D}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{4A6C9BB0-1F8A-4BC1-B99C-BD9F5C98D1E6}.Debug|x64.ActiveCfg = Debug|x64
+		{4A6C9BB0-1F8A-4BC1-B99C-BD9F5C98D1E6}.Debug|x64.Build.0 = Debug|x64
+		{4A6C9BB0-1F8A-4BC1-B99C-BD9F5C98D1E6}.Release|x64.ActiveCfg = Release|x64
+		{4A6C9BB0-1F8A-4BC1-B99C-BD9F5C98D1E6}.Release|x64.Build.0 = Release|x64
+		{C1D8BD52-3F06-4AE2-8A57-66EE5D5C7A6A}.Debug|x64.ActiveCfg = Debug|x64
+		{C1D8BD52-3F06-4AE2-8A57-66EE5D5C7A6A}.Debug|x64.Build.0 = Debug|x64
+		{C1D8BD52-3F06-4AE2-8A57-66EE5D5C7A6A}.Release|x64.ActiveCfg = Release|x64
+		{C1D8BD52-3F06-4AE2-8A57-66EE5D5C7A6A}.Release|x64.Build.0 = Release|x64
+		{9635A87A-059D-48D1-A127-6C5A88BBD598}.Debug|x64.ActiveCfg = Debug|x64
+		{9635A87A-059D-48D1-A127-6C5A88BBD598}.Debug|x64.Build.0 = Debug|x64
+		{9635A87A-059D-48D1-A127-6C5A88BBD598}.Release|x64.ActiveCfg = Release|x64
+		{9635A87A-059D-48D1-A127-6C5A88BBD598}.Release|x64.Build.0 = Release|x64
+		{52D5578C-6E72-4BC2-9BCA-362193C9633D}.Debug|x64.ActiveCfg = Debug|x64
+		{52D5578C-6E72-4BC2-9BCA-362193C9633D}.Debug|x64.Build.0 = Debug|x64
+		{52D5578C-6E72-4BC2-9BCA-362193C9633D}.Release|x64.ActiveCfg = Release|x64
+		{52D5578C-6E72-4BC2-9BCA-362193C9633D}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

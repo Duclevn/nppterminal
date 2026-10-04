@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64"><Configuration>Debug</Configuration><Platform>x64</Platform></ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64"><Configuration>Release</Configuration><Platform>x64</Platform></ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{C1D8BD52-3F06-4AE2-8A57-66EE5D5C7A6A}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <RootNamespace>NppTerminalTests</RootNamespace>
+    <ProjectName>NppTerminal.Tests</ProjectName>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <OutDir>$(SolutionDir)out\x64\Debug\</OutDir>
+    <IntDir>$(SolutionDir)out\obj\NppTerminal.Tests\Debug\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <OutDir>$(SolutionDir)out\x64\Release\</OutDir>
+    <IntDir>$(SolutionDir)out\obj\NppTerminal.Tests\Release\</IntDir>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings" />
+  <ImportGroup Label="PropertySheets" />
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup><TargetName>NppTerminal.Tests</TargetName><LinkIncremental>false</LinkIncremental></PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <WarningLevel>Level4</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>WIN32;_CONSOLE;UNICODE;_UNICODE;_WIN32_WINNT=0x0A00;WINVER=0x0A00;WIN32_LEAN_AND_MEAN;NOMINMAX;NPPTERMINAL_TESTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir)src;$(ProjectDir)third_party\notepadpp;$(ProjectDir)third_party\json\include;$(ProjectDir)packages\Microsoft.Web.WebView2.1.0.4258.31\build\native\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <TreatWarningAsError>false</TreatWarningAsError>
+      <ConformanceMode>true</ConformanceMode>
+      <RuntimeLibrary Condition="'$(Configuration)'=='Debug'">MultiThreadedDebug</RuntimeLibrary>
+      <RuntimeLibrary Condition="'$(Configuration)'=='Release'">MultiThreaded</RuntimeLibrary>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation Condition="'$(Configuration)'=='Debug'">true</GenerateDebugInformation>
+      <AdditionalLibraryDirectories>$(ProjectDir)packages\Microsoft.Web.WebView2.1.0.4258.31\build\native\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>WebView2LoaderStatic.lib;user32.lib;kernel32.lib;shell32.lib;uuid.lib;version.lib;advapi32.lib;ole32.lib;oleaut32.lib;bcrypt.lib;comctl32.lib;shlwapi.lib;gdi32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="src\Bridge.h" />
+    <ClInclude Include="src\Protocol.h" />
+    <ClInclude Include="src\TerminalSession.h" />
+    <ClInclude Include="src\BrokerProtocol.h" />
+    <ClInclude Include="src\ProfileCleanup.h" />
+    <ClInclude Include="src\WebViewHost.h" />
+    <ClInclude Include="tests\ProfileCleanup.Tests.h" />
+    <ClInclude Include="tests\WebViewRender.Tests.h" />
+    <ClInclude Include="tests\WebViewSecurity.Tests.h" />
+    <ClInclude Include="src\ShellCatalog.h" />
+    <ClInclude Include="src\DirectoryResolver.h" />
+    <ClInclude Include="src\ShellDiscovery.h" />
+    <ClInclude Include="src\Settings.h" />
+    <ClInclude Include="tests\ShellCatalog.Tests.h" />
+    <ClInclude Include="tests\Settings.Tests.h" />
+    <ClInclude Include="tests\ShellSmoke.Tests.h" />
+    <ClInclude Include="src\TerminalPanel.h" />
+    <ClInclude Include="tests\TerminalPanel.Tests.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="src\Bridge.cpp" />
+    <ClCompile Include="src\Protocol.cpp" />
+    <ClCompile Include="src\TerminalSession.cpp" />
+    <ClCompile Include="src\BrokerProtocol.cpp" />
+    <ClCompile Include="src\ProfileCleanup.cpp" />
+    <ClCompile Include="src\WebViewHost.cpp" />
+    <ClCompile Include="tests\NppTerminal.Tests.cpp" />
+    <ClCompile Include="tests\ProfileCleanup.Tests.cpp" />
+    <ClCompile Include="tests\WebViewRender.Tests.cpp" />
+    <ClCompile Include="tests\WebViewSecurity.Tests.cpp" />
+    <ClCompile Include="src\ShellCatalog.cpp" />
+    <ClCompile Include="src\DirectoryResolver.cpp" />
+    <ClCompile Include="src\ShellDiscovery.cpp" />
+    <ClCompile Include="src\Settings.cpp" />
+    <ClCompile Include="tests\ShellCatalog.Tests.cpp" />
+    <ClCompile Include="tests\Settings.Tests.cpp" />
+    <ClCompile Include="tests\ShellSmoke.Tests.cpp" />
+    <ClCompile Include="src\TerminalPanel.cpp" />
+    <ClCompile Include="src\SettingsDialog.cpp" />
+    <ClCompile Include="third_party\notepadpp\DockingFeature\StaticDialog.cpp" />
+    <ClCompile Include="tests\TerminalPanel.Tests.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="tests\TerminalPanel.Tests.rc" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

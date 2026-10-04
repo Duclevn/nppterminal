@@ -1,0 +1,18 @@
+{
+  "notepadpp": {
+    "hostTag": "v8.9.8.1",
+    "templateCommit": "27b7077ba89766b3a5a136a3d71af3a0cccc7d2a",
+    "messagesSha256": "16BA162DC282740D57E8CAA20C2A310504F513E3663A30CE6D6BE3CE353C09F1"
+  },
+  "webview2": {
+    "version": "1.0.4258.31",
+    "url": "https://api.nuget.org/v3-flatcontainer/microsoft.web.webview2/1.0.4258.31/microsoft.web.webview2.1.0.4258.31.nupkg",
+    "sha256": "56F7F4B8BF9AEE4B8EFEFBBDD4F67D5F74EBD1B100ED0806DA71BF76AF481AA9"
+  },
+  "json": {
+    "version": "3.12.0",
+    "sha256": "AAF127C04CB31C406E5B04A63F1AE89369FCCDE6D8FA7CDDA1ED4F32DFC5DE63"
+  },
+  "xterm": "6.0.0",
+  "addonFit": "0.11.0"
+}

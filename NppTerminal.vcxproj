@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64"><Configuration>Debug</Configuration><Platform>x64</Platform></ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64"><Configuration>Release</Configuration><Platform>x64</Platform></ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{4A6C9BB0-1F8A-4BC1-B99C-BD9F5C98D1E6}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <RootNamespace>NppTerminal</RootNamespace>
+    <ProjectName>NppTerminal</ProjectName>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <OutDir>$(SolutionDir)out\x64\Debug\</OutDir>
+    <IntDir>$(SolutionDir)out\obj\NppTerminal\Debug\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <OutDir>$(SolutionDir)out\x64\Release\</OutDir>
+    <IntDir>$(SolutionDir)out\obj\NppTerminal\Release\</IntDir>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings" />
+  <ImportGroup Label="PropertySheets" />
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <TargetName>NppTerminal</TargetName>
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <WarningLevel>Level4</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;_USRDLL;UNICODE;_UNICODE;_WIN32_WINNT=0x0A00;WINVER=0x0A00;WIN32_LEAN_AND_MEAN;NOMINMAX;NPPTERMINAL_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir)src;$(ProjectDir)third_party\notepadpp;$(ProjectDir)third_party\notepadpp\DockingFeature;$(ProjectDir)third_party\json\include;$(ProjectDir)packages\Microsoft.Web.WebView2.1.0.4258.31\build\native\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <TreatWarningAsError>false</TreatWarningAsError>
+      <ConformanceMode>true</ConformanceMode>
+      <RuntimeLibrary Condition="'$(Configuration)'=='Debug'">MultiThreadedDebug</RuntimeLibrary>
+      <RuntimeLibrary Condition="'$(Configuration)'=='Release'">MultiThreaded</RuntimeLibrary>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation Condition="'$(Configuration)'=='Debug'">true</GenerateDebugInformation>
+      <GenerateDebugInformation Condition="'$(Configuration)'=='Release'">false</GenerateDebugInformation>
+      <AdditionalLibraryDirectories>$(ProjectDir)packages\Microsoft.Web.WebView2.1.0.4258.31\build\native\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>WebView2LoaderStatic.lib;comctl32.lib;shlwapi.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;user32.lib;gdi32.lib;advapi32.lib;version.lib;bcrypt.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <ImportLibrary>$(OutDir)NppTerminal.lib</ImportLibrary>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="src\Bridge.h" />
+    <ClInclude Include="src\PluginDefinition.h" />
+    <ClInclude Include="src\Protocol.h" />
+    <ClInclude Include="src\resource.h" />
+    <ClInclude Include="src\TerminalPanel.h" />
+    <ClInclude Include="src\TerminalSession.h" />
+    <ClInclude Include="src\BrokerProtocol.h" />
+    <ClInclude Include="src\ProfileCleanup.h" />
+    <ClInclude Include="src\Version.h" />
+    <ClInclude Include="src\WebViewHost.h" />
+    <ClInclude Include="src\ShellCatalog.h" />
+    <ClInclude Include="src\DirectoryResolver.h" />
+    <ClInclude Include="src\ShellDiscovery.h" />
+    <ClInclude Include="src\Settings.h" />
+    <ClInclude Include="src\SettingsDialog.h" />
+    <ClInclude Include="src\SettingsDialogResource.h" />
+    <ClInclude Include="third_party\notepadpp\PluginInterface.h" />
+    <ClInclude Include="third_party\notepadpp\Notepad_plus_msgs.h" />
+    <ClInclude Include="third_party\notepadpp\Scintilla.h" />
+    <ClInclude Include="third_party\notepadpp\Sci_Position.h" />
+    <ClInclude Include="third_party\notepadpp\DockingFeature\Docking.h" />
+    <ClInclude Include="third_party\notepadpp\DockingFeature\DockingDlgInterface.h" />
+    <ClInclude Include="third_party\notepadpp\DockingFeature\StaticDialog.h" />
+    <ClInclude Include="third_party\notepadpp\DockingFeature\Window.h" />
+    <ClInclude Include="third_party\notepadpp\DockingFeature\dockingResource.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="src\Bridge.cpp" />
+    <ClCompile Include="src\NppTerminal.cpp" />
+    <ClCompile Include="src\PluginDefinition.cpp" />
+    <ClCompile Include="src\Protocol.cpp" />
+    <ClCompile Include="src\TerminalPanel.cpp" />
+    <ClCompile Include="src\TerminalSession.cpp" />
+    <ClCompile Include="src\BrokerProtocol.cpp" />
+    <ClCompile Include="src\ProfileCleanup.cpp" />
+    <ClCompile Include="src\WebViewHost.cpp" />
+    <ClCompile Include="src\ShellCatalog.cpp" />
+    <ClCompile Include="src\DirectoryResolver.cpp" />
+    <ClCompile Include="src\ShellDiscovery.cpp" />
+    <ClCompile Include="src\Settings.cpp" />
+    <ClCompile Include="src\SettingsDialog.cpp" />
+    <ClCompile Include="third_party\notepadpp\DockingFeature\StaticDialog.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="src\NppTerminal.rc" />
+    <ResourceCompile Include="src\SettingsDialog.rc" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>
