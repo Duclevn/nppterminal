@@ -37,7 +37,7 @@ try {
         Copy-Item -LiteralPath (Join-Path $projectRoot $name) -Destination $packagePath
     }
     Copy-Item -LiteralPath (Join-Path $projectRoot 'VERSION') -Destination $packagePath
-    foreach ($name in @('compatibility.md','implementation-status.md','manual-tests.md','validation-2026-10-03-continuation.md','validation-2026-10-04.md','shutdown-ownership.md')) {
+    foreach ($name in @('audit-remediation-2026-10-04.md','compatibility.md','implementation-status.md','manual-tests.md','validation-2026-10-03-continuation.md','validation-2026-10-04.md','shutdown-ownership.md')) {
         Copy-Item -LiteralPath (Join-Path $projectRoot "docs/$name") -Destination (Join-Path $packagePath 'docs')
     }
     Copy-Item -LiteralPath (Join-Path $projectRoot 'third_party/notepadpp/LICENSE.txt') -Destination (Join-Path $packagePath 'licenses/notepadpp-template-GPL-2.0.txt')

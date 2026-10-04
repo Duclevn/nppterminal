@@ -133,7 +133,7 @@
   };
   new ResizeObserver(fitNow).observe(document.getElementById('terminal'));
   terminal.onData(data => {
-    enqueueInput('input', data, new TextEncoder().encode(data).length);
+    enqueueInput('input', data, encoder.encode(data).length);
   });
   terminal.onBinary(data => {
     enqueueInput('binary', data, data.length);

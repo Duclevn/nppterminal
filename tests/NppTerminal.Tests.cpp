@@ -158,10 +158,9 @@ void testBoundedBridge()
 {
     BoundedOutputBridge bridge;
     bridge.beginGeneration(7);
-    std::atomic_bool cancelled{false};
-    require(bridge.push(OutputChunk{7, 1, {'a', 'b'}}, cancelled),
+    require(bridge.tryPush(OutputChunk{7, 1, {'a', 'b'}}),
         "bridge did not accept a current-generation chunk");
-    require(!bridge.push(OutputChunk{6, 2, {'x'}}, cancelled),
+    require(!bridge.tryPush(OutputChunk{6, 2, {'x'}}),
         "bridge accepted a stale-generation chunk");
 
     const auto chunk = bridge.takeForSend();
@@ -181,7 +180,7 @@ void testBoundedBridge()
     require(window != nullptr, "message-only bridge window creation failed");
     constexpr UINT kBridgeMessage = WM_APP + 0x47;
     bridge.attachDispatcher(window, kBridgeMessage);
-    require(bridge.push(OutputChunk{7, 3, {'z'}}, cancelled), "bridge second push failed");
+    require(bridge.tryPush(OutputChunk{7, 3, {'z'}}), "bridge second push failed");
     MSG message{};
     require(::PeekMessageW(&message, window, kBridgeMessage, kBridgeMessage, PM_REMOVE),
         "bridge did not post its first dispatch message");
@@ -191,7 +190,7 @@ void testBoundedBridge()
 
     // Push while the first notification is being handled. onDispatchHandled
     // must repost after it clears the posted bit, or this chunk is stranded.
-    require(bridge.push(OutputChunk{7, 4, {'q'}}, cancelled), "bridge race push failed");
+    require(bridge.tryPush(OutputChunk{7, 4, {'q'}}), "bridge race push failed");
     bridge.onDispatchHandled();
     require(::PeekMessageW(&message, window, kBridgeMessage, kBridgeMessage, PM_REMOVE),
         "bridge lost a chunk at dispatch handoff");
@@ -199,35 +198,57 @@ void testBoundedBridge()
     require(third && third->id == 4, "bridge handoff chunk was not sendable");
     bridge.acknowledge(7, 4);
 
+    // Production-sized output must not repost a queue head that cannot fit in
+    // the remaining renderer in-flight capacity. An acknowledgement that
+    // makes exactly enough room must resume dispatch.
+    bridge.beginGeneration(11);
+    const std::vector<std::uint8_t> productionChunk(32u * 1024u, 0x22);
+    require(bridge.tryPush(OutputChunk{11, 1, {'x'}}),
+        "bridge partial-capacity setup rejected the one-byte chunk");
+    for (std::uint64_t id = 2; id <= 9; ++id) {
+        require(bridge.tryPush(OutputChunk{11, id, productionChunk}),
+            "bridge partial-capacity setup rejected a production-sized chunk");
+    }
+    require(::PeekMessageW(&message, window, kBridgeMessage, kBridgeMessage, PM_REMOVE),
+        "bridge did not post the partial-capacity dispatch message");
+    for (std::uint64_t id = 1; id <= 8; ++id) {
+        const auto sent = bridge.takeForSend();
+        require(sent && sent->id == id,
+            "bridge partial-capacity setup did not preserve queue order");
+    }
+    require(!bridge.takeForSend(), "bridge sent a chunk beyond in-flight capacity");
+    bridge.onDispatchHandled();
+    require(!::PeekMessageW(&message, window, kBridgeMessage, kBridgeMessage, PM_REMOVE),
+        "bridge reposted without enough in-flight capacity for the queue head");
+    bridge.acknowledge(11, 1);
+    require(::PeekMessageW(&message, window, kBridgeMessage, kBridgeMessage, PM_REMOVE),
+        "bridge did not resume dispatch after enough acknowledgement capacity");
+    const auto resumed = bridge.takeForSend();
+    require(resumed && resumed->id == 9,
+        "bridge did not resume with the blocked queue head");
+    bridge.acknowledge(11, 9);
+
     bridge.beginGeneration(10);
-    cancelled.store(false);
     const std::vector<std::uint8_t> inFlightBlock(128u * 1024u, 0x33);
-    require(bridge.push(OutputChunk{10, 1, inFlightBlock}, cancelled) &&
-        bridge.push(OutputChunk{10, 2, inFlightBlock}, cancelled) &&
-        bridge.push(OutputChunk{10, 3, inFlightBlock}, cancelled),
+    require(bridge.tryPush(OutputChunk{10, 1, inFlightBlock}) &&
+        bridge.tryPush(OutputChunk{10, 2, inFlightBlock}) &&
+        bridge.tryPush(OutputChunk{10, 3, inFlightBlock}),
         "bridge in-flight setup failed");
     require(bridge.takeForSend() && bridge.takeForSend() && !bridge.takeForSend(),
         "bridge exceeded its in-flight byte limit");
     bridge.acknowledge(10, 1);
     bridge.acknowledge(10, 2);
 
-    // A full bounded queue must wake when cancellation is requested.
+    // A full bounded queue rejects a new chunk without blocking the producer.
     bridge.beginGeneration(9);
     const std::vector<std::uint8_t> block(1024u * 1024u, 0x5a);
     for (std::uint64_t id = 1; id <= 4; ++id) {
-        require(bridge.push(OutputChunk{9, id, block}, cancelled),
+        require(bridge.tryPush(OutputChunk{9, id, block}),
             "bridge did not fill its bounded queue");
     }
-    std::atomic_bool producerDone{false};
-    std::thread producer([&] {
-        (void)bridge.push(OutputChunk{9, 5, block}, cancelled);
-        producerDone.store(true);
-    });
-    ::Sleep(20);
-    require(!producerDone.load(), "bridge producer did not apply queue backpressure");
-    cancelled.store(true);
+    require(!bridge.tryPush(OutputChunk{9, 5, block}),
+        "bridge accepted a chunk beyond its bounded queue");
     bridge.cancel();
-    producer.join();
     ::DestroyWindow(window);
     ::UnregisterClassW(className, windowClass.hInstance);
     bridge.beginGeneration(8);
@@ -1105,6 +1126,102 @@ void testOrphanCommandCancellation()
         << L" baseline_threads=" << baseline.threads << L"\n";
 }
 
+int runPanelStreamChild()
+{
+    const HANDLE output = ::GetStdHandle(STD_OUTPUT_HANDLE);
+    if (!output || output == INVALID_HANDLE_VALUE) return 2;
+
+    constexpr std::size_t kTargetBytes = 2u * 1024u * 1024u;
+    const std::string line = "NPP_PANEL_STREAM_PAYLOAD_0123456789ABCDEF\r\n";
+    const std::string marker = "NPP_PANEL_STREAM_DONE\r\n";
+    std::string bytes;
+    bytes.reserve(kTargetBytes + marker.size());
+    while (bytes.size() < kTargetBytes) bytes += line;
+    bytes += marker;
+
+    std::size_t offset = 0;
+    while (offset < bytes.size()) {
+        DWORD written = 0;
+        const DWORD request = static_cast<DWORD>(std::min<std::size_t>(
+            bytes.size() - offset, 64u * 1024u));
+        if (!::WriteFile(output, bytes.data() + offset, request, &written, nullptr) ||
+            written == 0) return 2;
+        offset += written;
+    }
+    return 0;
+}
+
+int runPanelStreamingInputChild()
+{
+    const HANDLE input = ::GetStdHandle(STD_INPUT_HANDLE);
+    const HANDLE output = ::GetStdHandle(STD_OUTPUT_HANDLE);
+    if (!input || input == INVALID_HANDLE_VALUE || !output || output == INVALID_HANDLE_VALUE) {
+        return 2;
+    }
+
+    std::mutex outputMutex;
+    const auto writeAll = [&](const std::string& value) {
+        std::lock_guard<std::mutex> lock(outputMutex);
+        std::size_t offset = 0;
+        while (offset < value.size()) {
+            DWORD written = 0;
+            const DWORD request = static_cast<DWORD>(std::min<std::size_t>(
+                value.size() - offset, 64u * 1024u));
+            if (!::WriteFile(output, value.data() + offset, request, &written, nullptr) ||
+                written == 0) return false;
+            offset += written;
+        }
+        return true;
+    };
+
+    constexpr std::size_t kStreamChunkBytes = 4096;
+    const std::string line = "NPP_PANEL_STREAMING_OUTPUT_0123456789ABCDEF\r\n";
+    std::string streamChunk;
+    streamChunk.reserve(kStreamChunkBytes + line.size());
+    while (streamChunk.size() < kStreamChunkBytes) streamChunk += line;
+    if (!writeAll("NPP_PANEL_STREAMING_READY\r\n")) return 2;
+
+    std::atomic_bool running{true};
+    std::thread writer([&] {
+        while (running.load()) {
+            if (!writeAll(streamChunk)) return;
+            ::Sleep(1);
+        }
+    });
+
+    std::string pending;
+    char buffer[1024] = {};
+    const std::string probePrefix = "NPP_PANEL_STREAM_PROBE_";
+    while (running.load()) {
+        DWORD read = 0;
+        if (!::ReadFile(input, buffer, static_cast<DWORD>(sizeof(buffer)), &read, nullptr) ||
+            read == 0) break;
+        pending.append(buffer, buffer + read);
+        for (;;) {
+            const std::size_t newline = pending.find('\n');
+            if (newline == std::string::npos) break;
+            std::string command = pending.substr(0, newline);
+            pending.erase(0, newline + 1);
+            while (!command.empty() && (command.back() == '\r' || command.back() == '\n')) {
+                command.pop_back();
+            }
+            if (command == "NPP_PANEL_STREAM_STOP") {
+                writeAll("NPP_PANEL_STREAMING_STOPPED\r\n");
+                running.store(false);
+                break;
+            }
+            if (command.rfind(probePrefix, 0) == 0 && command.size() > probePrefix.size()) {
+                const std::string response = "NPP_PANEL_STREAM_RESPONSE_" +
+                    command.substr(probePrefix.size()) + "\r\n";
+                if (!writeAll(response)) running.store(false);
+            }
+        }
+    }
+    running.store(false);
+    if (writer.joinable()) writer.join();
+    return 0;
+}
+
 int runJobChild()
 {
     SessionProbe probe;
@@ -1311,6 +1428,10 @@ int wmain(int argc, wchar_t** argv)
     for (int index = 1; index < argc; ++index) {
         if (std::wstring(argv[index]) == L"--job-child") return runJobChild();
         if (std::wstring(argv[index]) == L"--ctrl-c-child") return runCtrlCChild();
+        if (std::wstring(argv[index]) == L"--panel-stream-child") return runPanelStreamChild();
+        if (std::wstring(argv[index]) == L"--panel-stream-input-child") {
+            return runPanelStreamingInputChild();
+        }
     }
     bool unit = false;
     bool conpty = false;

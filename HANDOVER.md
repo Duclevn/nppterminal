@@ -1,8 +1,12 @@
 # NppTerminal session handover
 
-Updated 4 October 2026. Current authoritative candidate **0.3.26**. The user authorized cleanup of obsolete generated versions and an initial commit and push to https://github.com/Duclevn/nppterminal.git. Current repository instructions govern delegation. See `docs/cleanup-2026-10-04.md` for the cleanup scope and checks.
+Updated 4 October 2026. Current candidate **0.5.0**, matching `VERSION`, adds About with author Duc Le and website https://ducle.uk. The official Release x64 build, all 19 standard validation groups and the About content/menu/close smoke checks passed. See [the dated validation record](docs/validation-2026-10-04.md); existing manual/resource release gates remain open.
+
+Earlier remediation evidence: Historical remediation candidate **0.4.9**; a fresh, hash-verified 109-file source/bootstrap official build passed, and standard validation passed 19 of 19 groups with exit 0. The user chose to keep WebView2 and leave the 150 MiB active-memory gate open while handing off the other fixes. Final package/source inspection evidence is recorded in `out/validation/audit-remediation-20261004/artifact-handoff-0.4.9.json`. See the [audit remediation record](docs/audit-remediation-2026-10-04.md) and `docs/cleanup-2026-10-04.md` for current status and cleanup scope.
 
 The user explicitly authorized harmless terminal commands through Computer Use in the isolated portable acceptance instance. This overrides the skill's terminal-command restriction only for that scope. Other Computer Use guidance still applies. Computer Use is connected; no restart is indicated. Preserve unrelated user hosts, documents, settings and profiles.
+
+## Historical 0.3.26 record
 
 Development candidate **0.3.26** restores Ctrl+C by removing CREATE_NEW_PROCESS_GROUP from both broker and shell creation. The dedicated ConPTY and kill-on-close jobs retain session containment. A real native signal regression failed before the complete fix and passed afterward; the actual portable Notepad++ terminal then interrupted Python with KeyboardInterrupt and interrupted PowerShell Start-Sleep, returning to usable prompts.
 
@@ -12,15 +16,26 @@ Bounded 0.3.26 native UI observations passed Python and PowerShell Ctrl+C, multi
 
 ## Current artifacts and evidence
 
+The current remediation evidence is under `out/validation/audit-remediation-20261004`. The final standard record is `out/validation/0.4.9-20261004T133857640Z/summary.json`, ending at `2026-10-04T13:40:24.5776569Z`; all 19 groups passed with exit 0. The fresh-build input comparison is `out/validation/audit-remediation-20261004/clean-build-input-comparison-0.4.9.json` for 109 files. Native build attempts 0.4.0 and 0.4.6 failed and consumed their reserved versions; earlier 0.4.1/2/3/4/5/7/8 panel diagnostics remain historical records. The 0.4.3 native 30-minute stream passed at 1,800 seconds with 22,498,114 lines and 461,349,377 bytes (final partial 16 bytes), while that candidate's overall validation failed on the older panel fixture. The 0.4.4 native 30-minute stream passed with 22,247,571 lines and 456,087,974 bytes (final partial 16 bytes), ending at `2026-10-04T13:53:19.1296845Z`; its overall validation also failed on the older panel fixture. All 35 production source files except version metadata match 0.4.9. The 0.4.9 long stream was not rerun and is not release-certified.
+
+The final panel check uses a visible owned fake host and native protocol path with actual shipping xterm assets for rendering; it is not a physical keyboard or full Notepad++ operator test. It transferred 2,097,609 bytes in 467 ms (4.28359 MiB/s). Quiet echo/ack p50 was 30/16 ms and p95 33/33 ms, render p50/p95 33/35 ms; streaming output p50/p95 was 15/32 ms, ack 15/18 ms and render 30/33 ms; hidden mode used two polls over 250 ms. The final reference was Windows 11 build 26300.9457, Notepad++ 8.9.8.1, and WebView2 154.0.4258.53. Full IME, AltGr, DPI, accessibility, clean-machine, protected-installation and related operator checks remain open. No `--disable-gpu` or InPrivate shipping change was adopted.
+
+The final 0.4.9 resource reference used a matching 1300x1600 stock baseline of 71,962,624 bytes; all three handoff baseline samples matched. Never-open visible idle dock was 6.25 MiB below stock (measurement noise); after hide, idle dock with no heavy components was +1.10 MiB with zero WebView, broker, ConPTY or shell children, supporting the ≤5 MiB never-open gate for that full-viewport match. Active 80x24 captures at 13:45:46, 13:46:26 and 13:47:29 measured 177.93, 178.16 and 178.12 MiB, above the 150 MiB budget; browser was 180,617,216–180,789,248 bytes (about 172.25–172.41 MiB), broker 1.96–1.99 MiB, shell about 27.08 MiB and ConPTY 1.37 MiB. F-02 remains open by the user's decision to keep WebView2 and leave the memory gate open.
+
+The final 0.4.9 package contains 27 allowlisted files; exact hashes, embedded versions, source inspection, and the eight-member UI runtime comparison are recorded in `out/validation/audit-remediation-20261004/artifact-handoff-0.4.9.json`. Existing 0.4.1 and 0.4.2 package records preserve the historical 26-file count from before this report was added.
+
+The final owned portable UI check preserved all ten process identities across dock-X hide and editor-shortcut reopen. Kill released all children and left host overhead at +3.89 MiB. Valid hidden samples 3–5 measured 178.48–181.43 MiB; samples 1–2 were excluded because the caption-focused shortcut did not hide. CPU observations do not certify an idle-CPU gate. Both owned hosts were closed; see `out/validation/audit-remediation-20261004/ui-lifecycle-0.4.9.json`.
+
+### Historical 0.3.26 artifacts
+
 The original package/source inspection record is `out/validation/continuation-20261004/artifact-handoff-0.3.26.json`; the post-cleanup source package inspection and hashes are recorded separately under `out`. Bounded observations are in `interactive-acceptance-0.3.26.md` and `.json`, with process identity JSONs for hide/reopen/natural exit/final close. The standard summary is `out/validation/0.3.26-20261004T093756193Z/summary.json`, overall Failed, 18 Passed and 1 Failed. Obsolete packages and raw validation artifacts were removed during the authorized cleanup; historical findings remain documented in `docs`.
 
 The final GUI runtime bytes are the ones installed from the inspected 0.3.26 package. If documentation is repackaged after the UI observations, compare the eight shipped native/runtime members by hash and preserve the observed package proof before updating the closed fixture. Do not claim another UI run from an offline update.
 
 ## Required next work
 
-1. Diagnose the remaining concurrent profile cleanup failure; do not dismiss it because 0.3.23 passed sixty pairs. Preserve nonce, identity, lease and reparse safety. Current failure was both helpers exit 2.
-2. Resolve the active 150 MiB budget miss; current-candidate standardized measurement remains unrun. Do not disable GPU or suspend hidden running output to manufacture a pass.
-3. Complete original-name host/full input, IME/AltGr/clipboard/full-screen, DPI/accessibility, multiple-host, privacy, latency and clean/protected installation checks. User accepted a clean-PC checklist, not a gate waiver.
-4. After production/resource changes, final candidate needs a clean-source build and its own 30-minute stream. Historical 0.3.18 long result is not current certification.
+1. F-02 remains open by the user's decision; keep WebView2 and retain the 150 MiB budget.
+2. Complete the manual IME, AltGr, DPI, accessibility, clean-machine, protected-installation and full operator checks.
+3. Treat the unrerun 0.4.9 long stream as not release-certified unless separately executed and recorded.
 
 Accepted scope: Windows 11 x64; Toggle/X hide and preserve, Kill releases; WSL attached session only, no distribution/VM shutdown; F-014 URL opening deferred. No budgets were relaxed. Historical document references to removed raw artifacts describe earlier observations and are not current filesystem guarantees.

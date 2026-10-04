@@ -20,6 +20,17 @@ namespace {
 
 constexpr DWORD kProbePollMs = 20;
 constexpr std::size_t kProbeMaxOutputBytes = 32u * 1024u;
+// Windows supports extended paths up to 32,767 characters.  Registry values
+// longer than that cannot name a supported executable, so reject them before
+// sizing a buffer from the reported byte count.
+constexpr std::size_t kMaxRegistryStringChars = 32767;
+
+bool boundedRegistryStringBytes(DWORD bytes)
+{
+    return bytes >= sizeof(wchar_t) &&
+        bytes % sizeof(wchar_t) == 0 &&
+        static_cast<std::size_t>(bytes / sizeof(wchar_t)) <= kMaxRegistryStringChars;
+}
 
 void closeHandle(HANDLE& handle)
 {
@@ -140,7 +151,7 @@ bool readRegistryString(HKEY root, const wchar_t* keyPath, const wchar_t* valueN
     DWORD bytes = 0;
     LONG result = ::RegQueryValueExW(key, valueName, nullptr, &type, nullptr, &bytes);
     if (result != ERROR_SUCCESS ||
-        (type != REG_SZ && type != REG_EXPAND_SZ) || bytes < sizeof(wchar_t)) {
+        (type != REG_SZ && type != REG_EXPAND_SZ) || !boundedRegistryStringBytes(bytes)) {
         ::RegCloseKey(key);
         return false;
     }
@@ -148,7 +159,10 @@ bool readRegistryString(HKEY root, const wchar_t* keyPath, const wchar_t* valueN
     result = ::RegQueryValueExW(key, valueName, nullptr, &type,
         reinterpret_cast<LPBYTE>(buffer.data()), &bytes);
     ::RegCloseKey(key);
-    if (result != ERROR_SUCCESS) return false;
+    if (result != ERROR_SUCCESS ||
+        (type != REG_SZ && type != REG_EXPAND_SZ) || !boundedRegistryStringBytes(bytes)) {
+        return false;
+    }
     value.assign(buffer.data());
     if (type == REG_EXPAND_SZ) value = expandEnvironment(value);
     return !value.empty();
@@ -199,10 +213,13 @@ void addPowerShellRegistryCandidates(std::vector<ShellInfo>& catalog)
                 std::wstring install;
                 if (::RegQueryValueExW(versionKey, L"InstallLocation", nullptr, &type,
                     nullptr, &bytes) == ERROR_SUCCESS &&
-                    (type == REG_SZ || type == REG_EXPAND_SZ) && bytes >= sizeof(wchar_t)) {
+                    (type == REG_SZ || type == REG_EXPAND_SZ) &&
+                    boundedRegistryStringBytes(bytes)) {
                     std::vector<wchar_t> buffer(bytes / sizeof(wchar_t) + 1, L'\0');
                     if (::RegQueryValueExW(versionKey, L"InstallLocation", nullptr, &type,
-                        reinterpret_cast<LPBYTE>(buffer.data()), &bytes) == ERROR_SUCCESS) {
+                        reinterpret_cast<LPBYTE>(buffer.data()), &bytes) == ERROR_SUCCESS &&
+                        (type == REG_SZ || type == REG_EXPAND_SZ) &&
+                        boundedRegistryStringBytes(bytes)) {
                         install.assign(buffer.data());
                         if (type == REG_EXPAND_SZ) install = expandEnvironment(install);
                     }
@@ -450,6 +467,14 @@ bool hasDistroOutput(const std::wstring& output)
 }
 
 } // namespace
+
+#ifdef NPPTERMINAL_TESTS
+bool readRegistryStringForTest(HKEY root, const wchar_t* keyPath,
+    const wchar_t* valueName, REGSAM view, std::wstring& value)
+{
+    return readRegistryString(root, keyPath, valueName, view, value);
+}
+#endif
 
 bool isAbsoluteWindowsPath(const std::wstring& path)
 {

@@ -5,7 +5,7 @@
 #include <windows.h>
 
 constexpr wchar_t NPP_PLUGIN_NAME[] = L"NppTerminal";
-constexpr int nbFunc = 3;
+constexpr int nbFunc = 4;
 
 void pluginInit(HANDLE module);
 void pluginCleanUp();
@@ -16,3 +16,4 @@ bool setCommand(std::size_t index, const wchar_t* name, PFUNCPLUGINCMD function,
 void toggleTerminal();
 void terminalSettings();
 void openTerminalHere();
+void aboutPlugin();

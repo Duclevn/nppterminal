@@ -726,8 +726,8 @@ void testConcurrentCleanup(const std::wstring& parent, std::vector<std::string>&
     require(!firstResult.timedOut && !secondResult.timedOut,
         "concurrent cleanup helper timed out (first=" + brokerResultText(firstResult) +
         ", second=" + brokerResultText(secondResult) + ")");
-    require(firstResult.exitCode == 0 || secondResult.exitCode == 0,
-        "concurrent cleanup had no successful claimant (first=" +
+    require((firstResult.exitCode == 0) != (secondResult.exitCode == 0),
+        "concurrent cleanup did not produce exactly one successful claimant (first=" +
         brokerResultText(firstResult) + ", second=" + brokerResultText(secondResult) + ")");
     requirePathAbsent(profile.rootPath, "concurrent cleanup owned root");
     requirePathAbsent(asset, "concurrent cleanup asset");
@@ -752,14 +752,16 @@ void testTransientClaimHandle(const std::wstring& parent)
 
     LockedFileGuard reader;
     reader.handle = ::CreateFileW(asset.c_str(), GENERIC_READ,
-        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
+        FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING,
         FILE_ATTRIBUTE_NORMAL, nullptr);
     if (reader.handle == INVALID_HANDLE_VALUE) reader.handle = nullptr;
     require(reader.handle != nullptr, "unable to open transient cleanup reader");
-    // A concurrent helper can briefly hold a contained marker/lease handle.
+    // A contained reader without delete sharing blocks MoveFileEx. Keep it
+    // open longer than the historical four-attempt reservation window so this
+    // remains a deterministic regression for the claim retry path.
     // The future joins before reader or fixtures are destroyed, even on failure.
     auto releaseReader = std::async(std::launch::async, [&reader] {
-        ::Sleep(50);
+        ::Sleep(300);
         reader.release();
     });
     std::wstring error;
@@ -1028,7 +1030,7 @@ void runProfileCleanupTests()
     testValidReleasedCleanup(parent);
     testWrongNonce(parent);
     testHeldLease(parent);
-    for (int attempt = 0; attempt != 10; ++attempt) {
+    for (int attempt = 0; attempt != 20; ++attempt) {
         testConcurrentCleanup(parent, notRun);
     }
     testTransientClaimHandle(parent);

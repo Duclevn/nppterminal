@@ -23,6 +23,10 @@ constexpr std::size_t kMaxQueuedInputBytes = kMaxInputBytes;
 constexpr DWORD kHardStopBudgetMs = 2000;
 constexpr DWORD kStopForceReserveMs = 200;
 constexpr DWORD kPollSleepMs = 1;
+constexpr DWORD kPollReadBlockBytes = 32u * 1024u;
+constexpr std::size_t kPollEventByteBudget = 128u * 1024u;
+constexpr std::size_t kPollOutputByteBudget = 256u * 1024u;
+constexpr auto kPollPipeTimeBudget = std::chrono::milliseconds(2);
 #ifndef PIPE_REJECT_REMOTE_CLIENTS
 constexpr DWORD PIPE_REJECT_REMOTE_CLIENTS = 0x00000008u;
 #endif
@@ -1016,16 +1020,42 @@ void TerminalSession::dispatchEvent(const BrokerFrame& frame)
 
 void TerminalSession::drainEventPipe()
 {
-    if (eventPipeClosed_ || !eventPipe_) return;
-    DWORD available = 0;
-    if (!::PeekNamedPipe(eventPipe_, nullptr, 0, nullptr, &available, nullptr)) {
-        const DWORD error = ::GetLastError();
-        if (isPipeClosedError(error)) eventPipeClosed_ = true;
-        else markTransportFailure(L"The broker event pipe failed: " + win32Error(error));
-        return;
-    }
-    if (available != 0) {
-        const DWORD amount = std::min<DWORD>(available, 32u * 1024u);
+    const auto deadline = std::chrono::steady_clock::now() + kPollPipeTimeBudget;
+    std::size_t drainedBytes = 0;
+    bool incompleteFrame = false;
+    for (;;) {
+        for (;;) {
+            if (std::chrono::steady_clock::now() >= deadline) break;
+            BrokerFrame frame;
+            std::wstring error;
+            if (!tryDecodeBrokerFrame(eventBuffer_, frame, error)) {
+                if (!error.empty()) {
+                    markTransportFailure(error);
+                    return;
+                }
+                incompleteFrame = !eventBuffer_.empty();
+                break;
+            }
+            incompleteFrame = false;
+            dispatchEvent(frame);
+            if (std::chrono::steady_clock::now() >= deadline) break;
+        }
+        if (drainedBytes >= kPollEventByteBudget ||
+            std::chrono::steady_clock::now() >= deadline || eventPipeClosed_ || !eventPipe_) {
+            break;
+        }
+        DWORD available = 0;
+        if (!::PeekNamedPipe(eventPipe_, nullptr, 0, nullptr, &available, nullptr)) {
+            const DWORD error = ::GetLastError();
+            if (isPipeClosedError(error)) eventPipeClosed_ = true;
+            else markTransportFailure(L"The broker event pipe failed: " + win32Error(error));
+            break;
+        }
+        if (available == 0) break;
+        const std::size_t remaining = kPollEventByteBudget - drainedBytes;
+        const DWORD amount = static_cast<DWORD>(std::min<std::size_t>({
+            static_cast<std::size_t>(available), kPollReadBlockBytes, remaining}));
+        if (amount == 0) break;
         std::vector<std::uint8_t> bytes(amount);
         DWORD read = 0;
         if (!::ReadFile(eventPipe_, bytes.data(), amount, &read, nullptr) || read == 0) {
@@ -1034,18 +1064,11 @@ void TerminalSession::drainEventPipe()
             else markTransportFailure(L"The broker event read failed: " + win32Error(error));
             return;
         }
+        drainedBytes += read;
         eventBuffer_.insert(eventBuffer_.end(), bytes.begin(), bytes.begin() + read);
+        incompleteFrame = false;
     }
-    for (;;) {
-        BrokerFrame frame;
-        std::wstring error;
-        if (!tryDecodeBrokerFrame(eventBuffer_, frame, error)) {
-            if (!error.empty()) markTransportFailure(error);
-            break;
-        }
-        dispatchEvent(frame);
-    }
-    if (eventPipeClosed_ && !eventBuffer_.empty()) {
+    if (eventPipeClosed_ && !eventBuffer_.empty() && incompleteFrame) {
         markTransportFailure(L"The broker event channel ended with a partial frame.");
     }
 }
@@ -1065,16 +1088,48 @@ bool TerminalSession::consumeOutputFrame()
 void TerminalSession::drainOutputPipe()
 {
     if (pendingOutputFrame_ && !consumeOutputFrame()) return;
-    if (outputPipeClosed_ || !outputPipe_) return;
-    DWORD available = 0;
-    if (!::PeekNamedPipe(outputPipe_, nullptr, 0, nullptr, &available, nullptr)) {
-        const DWORD error = ::GetLastError();
-        if (isPipeClosedError(error)) outputPipeClosed_ = true;
-        else markTransportFailure(L"The broker output pipe failed: " + win32Error(error));
-        return;
-    }
-    if (available != 0) {
-        const DWORD amount = std::min<DWORD>(available, 32u * 1024u);
+    const auto deadline = std::chrono::steady_clock::now() + kPollPipeTimeBudget;
+    std::size_t drainedBytes = 0;
+    bool incompleteFrame = false;
+    for (;;) {
+        for (;;) {
+            if (std::chrono::steady_clock::now() >= deadline) break;
+            BrokerFrame frame;
+            std::wstring error;
+            if (!tryDecodeBrokerFrame(outputBuffer_, frame, error)) {
+                if (!error.empty()) {
+                    markTransportFailure(error);
+                    return;
+                }
+                incompleteFrame = !outputBuffer_.empty();
+                break;
+            }
+            incompleteFrame = false;
+            if (frame.type != BrokerFrameType::Output) {
+                markTransportFailure(L"The broker output channel contained a non-output frame.");
+                return;
+            }
+            if (frame.generation != generation()) continue;
+            pendingOutputFrame_ = new BrokerFrame(std::move(frame));
+            if (!consumeOutputFrame()) return;
+            if (std::chrono::steady_clock::now() >= deadline) break;
+        }
+        if (drainedBytes >= kPollOutputByteBudget ||
+            std::chrono::steady_clock::now() >= deadline || outputPipeClosed_ || !outputPipe_) {
+            break;
+        }
+        DWORD available = 0;
+        if (!::PeekNamedPipe(outputPipe_, nullptr, 0, nullptr, &available, nullptr)) {
+            const DWORD error = ::GetLastError();
+            if (isPipeClosedError(error)) outputPipeClosed_ = true;
+            else markTransportFailure(L"The broker output pipe failed: " + win32Error(error));
+            break;
+        }
+        if (available == 0) break;
+        const std::size_t remaining = kPollOutputByteBudget - drainedBytes;
+        const DWORD amount = static_cast<DWORD>(std::min<std::size_t>({
+            static_cast<std::size_t>(available), kPollReadBlockBytes, remaining}));
+        if (amount == 0) break;
         std::vector<std::uint8_t> bytes(amount);
         DWORD read = 0;
         if (!::ReadFile(outputPipe_, bytes.data(), amount, &read, nullptr) || read == 0) {
@@ -1083,24 +1138,11 @@ void TerminalSession::drainOutputPipe()
             else markTransportFailure(L"The broker output read failed: " + win32Error(error));
             return;
         }
+        drainedBytes += read;
         outputBuffer_.insert(outputBuffer_.end(), bytes.begin(), bytes.begin() + read);
+        incompleteFrame = false;
     }
-    for (;;) {
-        BrokerFrame frame;
-        std::wstring error;
-        if (!tryDecodeBrokerFrame(outputBuffer_, frame, error)) {
-            if (!error.empty()) markTransportFailure(error);
-            break;
-        }
-        if (frame.type != BrokerFrameType::Output) {
-            markTransportFailure(L"The broker output channel contained a non-output frame.");
-            return;
-        }
-        if (frame.generation != generation()) continue;
-        pendingOutputFrame_ = new BrokerFrame(std::move(frame));
-        if (!consumeOutputFrame()) return;
-    }
-    if (outputPipeClosed_ && !outputBuffer_.empty()) {
+    if (outputPipeClosed_ && !outputBuffer_.empty() && incompleteFrame) {
         markTransportFailure(L"The broker output channel ended with a partial frame.");
     }
 }

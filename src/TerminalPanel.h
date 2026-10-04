@@ -29,8 +29,14 @@ public:
     static constexpr UINT kOutputMessage = WM_APP + 0x321;
     static constexpr UINT kSessionStateMessage = WM_APP + 0x322;
     static constexpr UINT kInputAckMessage = WM_APP + 0x323;
+    static constexpr UINT kSessionPumpMessage = WM_APP + 0x324;
     static constexpr UINT_PTR kSessionPumpTimer = 1;
     static constexpr UINT kSessionPumpIntervalMs = 33;
+    static constexpr UINT kHiddenSessionPumpIntervalMs = 100;
+    // Accepted input gets a short bounded retry cadence; idle visible/hidden
+    // polling remains governed by the intervals above.
+    static constexpr UINT kInputPumpIntervalMs = 8;
+    static constexpr UINT kInputPumpBurstDurationMs = 100;
 
     TerminalPanel(HMODULE module, HWND nppWindow, int dockingId);
     ~TerminalPanel() override;
@@ -79,10 +85,12 @@ private:
     void sendClear();
     void pumpSession();
     void pumpOutput();
+    void postSessionPump();
     void maybeReleasePendingExit();
     void applyStateEvent(StateEvent event);
     void clearPendingExit();
     void startSessionPump();
+    void startInputPumpBurst();
     void stopSessionPump();
     void startSession(std::uint64_t generation, std::uint16_t columns, std::uint16_t rows,
         const std::wstring& explicitDirectory = {});
@@ -104,7 +112,7 @@ private:
     void restartSession();
     void killSession(StopReason reason = StopReason::UserKill);
     void clearSessionView();
-    void setStatus(const std::wstring& text, bool error = false);
+    void setStatus(const std::wstring& text);
     void updateControlFont();
     void layoutControls();
     void updateButtons();
@@ -141,15 +149,12 @@ private:
     bool releaseWebViewAfterStop_ = false;
     bool settingsLoaded_ = false;
     bool discoveryPending_ = false;
-    bool discoveryRefresh_ = false;
     bool discoveryOnly_ = false;
     bool pendingOpenHere_ = false;
-    bool hostShutdownPending_ = false;
     bool selectedShellExplicit_ = false;
     std::uint64_t discoveryGeneration_ = 0;
     std::uint16_t discoveryColumns_ = 80;
     std::uint16_t discoveryRows_ = 24;
-    std::wstring discoveryExplicitDirectory_;
     std::wstring openHereDirectory_;
     std::wstring configPath_;
     std::wstring selectedShellId_;
@@ -163,6 +168,9 @@ private:
     std::uint64_t pageGeneration_ = 0;
     std::uint16_t pageColumns_ = 80;
     std::uint16_t pageRows_ = 24;
+    bool sessionPumpPosted_ = false;
+    bool outputBackpressured_ = false;
+    ULONGLONG inputPumpBurstDeadline_ = 0;
     SessionState visibleState_ = SessionState::NoSession;
     std::optional<StateEvent> pendingExit_;
     ULONGLONG pendingExitDeadline_ = 0;
@@ -172,6 +180,11 @@ private:
     // plugin and are bounded so a noisy shell cannot grow the test process.
     mutable std::optional<bool> testConfirmation_;
     std::string testOutput_;
+    std::size_t testOutputDroppedBytes_ = 0;
+    std::uint64_t testSessionPumpCount_ = 0;
+    std::uint64_t testLastInputAckId_ = 0;
+    std::uint64_t testLastOutputId_ = 0;
+    std::uint64_t testLastOutputAckId_ = 0;
 #endif
 
     BoundedOutputBridge bridge_;

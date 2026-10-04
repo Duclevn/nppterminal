@@ -195,6 +195,8 @@ bool TerminalPanel::createDock()
     ::SendMessageW(nppWindow_, NPPM_DMMREGASDCKDLG, 0,
         reinterpret_cast<LPARAM>(&data));
     dispatchWindow_.store(_hSelf);
+    sessionPumpPosted_ = false;
+    outputBackpressured_ = false;
     bridge_.attachDispatcher(_hSelf, kOutputMessage);
     return true;
 }
@@ -208,11 +210,12 @@ void TerminalPanel::toggleByUser()
 {
     userOpened_ = true;
     if (!createDock()) {
-        setStatus(L"Unable to create the NppTerminal dock panel.", true);
+        setStatus(L"Unable to create the NppTerminal dock panel.");
         return;
     }
     const bool show = !isVisible();
     display(show);
+    if (session_.hasPendingWork() || discoveryPending_) startSessionPump();
     if (show) {
         if (!session_.hasProcess() && !discoveryPending_ && !restartPending_) {
             captureDirectorySnapshot({});
@@ -229,9 +232,10 @@ void TerminalPanel::toggleByUser()
 
 bool TerminalPanel::shutdownForHost()
 {
-    hostShutdownPending_ = false;
     shuttingDown_.store(true);
     dispatchWindow_.store(nullptr);
+    sessionPumpPosted_ = false;
+    outputBackpressured_ = false;
     discovery_.cancel();
     discoveryPending_ = false;
     pendingDirectoryCandidates_.reset();
@@ -249,16 +253,13 @@ bool TerminalPanel::shutdownForHost()
 
 void TerminalPanel::prepareForHostShutdown()
 {
-    if (shuttingDown_.load()) return;
     // BEFORESHUTDOWN is cancellable.  Keep the dock, WebView, and session
     // usable until Notepad++ sends the final SHUTDOWN notification.
-    hostShutdownPending_ = true;
 }
 
 void TerminalPanel::cancelHostShutdown()
 {
     if (shuttingDown_.load()) return;
-    hostShutdownPending_ = false;
     if (session_.hasPendingWork() || discoveryPending_) startSessionPump();
     updateButtons();
 }
@@ -281,6 +282,7 @@ void TerminalPanel::destroy()
     dispatchWindow_.store(nullptr);
     discovery_.cancel();
     discoveryPending_ = false;
+    outputBackpressured_ = false;
     stopSessionPump();
     clearPendingExit();
     bridge_.cancel();
@@ -370,11 +372,13 @@ void TerminalPanel::onWebError(const std::wstring& message)
     openHereDirectory_.clear();
     clearPendingExit();
     bridge_.cancel();
+    inputPumpBurstDeadline_ = 0;
     if (visibleState_ == SessionState::Running || visibleState_ == SessionState::Starting ||
         session_.hasProcess()) {
         session_.requestStop(StopReason::PanelDestroy);
+        startSessionPump();
     }
-    setStatus(message, true);
+    setStatus(message);
     webView_.close();
     updateButtons();
 }
@@ -393,6 +397,9 @@ void TerminalPanel::sendInit()
     pageReady_ = false;
     pageGeneration_ = session_.nextGeneration();
     bridge_.beginGeneration(pageGeneration_);
+    outputBackpressured_ = false;
+    inputPumpBurstDeadline_ = 0;
+    if (session_.hasPendingWork() || pendingExit_ || discoveryPending_) startSessionPump();
     if (!settingsLoaded_) loadSettings();
     DarkModeColors colors{};
     const bool dark = ::SendMessageW(nppWindow_, NPPM_ISDARKMODEENABLED, 0, 0) != FALSE;
@@ -474,20 +481,31 @@ bool TerminalPanel::onSessionOutput(std::uint64_t generation, std::uint64_t id,
     const std::vector<std::uint8_t>& data, const std::atomic_bool& cancelled)
 {
     (void)cancelled;
+    if (data.empty() || data.size() > kMaxOutputChunkBytes) return false;
+    const bool accepted = bridge_.tryPush(OutputChunk{generation, id, data});
+    outputBackpressured_ = !accepted;
 #ifdef NPPTERMINAL_TESTS
-    constexpr std::size_t kTestOutputLimit = 1024u * 1024u;
-    if (testOutput_.size() < kTestOutputLimit) {
-        const std::size_t count = std::min(kTestOutputLimit - testOutput_.size(), data.size());
-        testOutput_.append(reinterpret_cast<const char*>(data.data()), count);
+    constexpr std::size_t kTestOutputLimit = 4u * 1024u * 1024u;
+    if (accepted) {
+        testLastOutputId_ = id;
+        if (testOutput_.size() < kTestOutputLimit) {
+            const std::size_t count = std::min(kTestOutputLimit - testOutput_.size(), data.size());
+            testOutput_.append(reinterpret_cast<const char*>(data.data()), count);
+            testOutputDroppedBytes_ += data.size() - count;
+        } else {
+            testOutputDroppedBytes_ += data.size();
+        }
     }
 #endif
-    if (data.empty() || data.size() > kMaxOutputChunkBytes) return false;
-    return bridge_.tryPush(OutputChunk{generation, id, data});
+    return accepted;
 }
 
 void TerminalPanel::pumpSession()
 {
     if (shuttingDown_.load()) return;
+#ifdef NPPTERMINAL_TESTS
+    ++testSessionPumpCount_;
+#endif
     if (discoveryPending_) {
         discovery_.poll();
         if (discovery_.finished()) finishDiscovery();
@@ -497,6 +515,16 @@ void TerminalPanel::pumpSession()
 
     if (!session_.hasPendingWork() && !pendingExit_ && !discoveryPending_) {
         stopSessionPump();
+    }
+}
+
+void TerminalPanel::postSessionPump()
+{
+    const HWND window = dispatchWindow_.load();
+    if (shuttingDown_.load() || !window || sessionPumpPosted_) return;
+    sessionPumpPosted_ = true;
+    if (!::PostMessageW(window, kSessionPumpMessage, 0, 0)) {
+        sessionPumpPosted_ = false;
     }
 }
 
@@ -534,7 +562,7 @@ void TerminalPanel::maybeReleasePendingExit()
             visibleState_ = SessionState::Error;
             const std::wstring message =
                 L"The renderer did not acknowledge the final output. Retry the terminal.";
-            setStatus(message, true);
+            setStatus(message);
             sendState(generation, SessionState::Error, message);
             updateButtons();
             if (!session_.hasPendingWork()) stopSessionPump();
@@ -553,8 +581,7 @@ void TerminalPanel::applyStateEvent(StateEvent event)
     if (shuttingDown_.load() || event.generation != pageGeneration_) return;
     visibleState_ = event.state;
     setStatus(event.state == SessionState::Running ?
-            runningStatus(shellDisplayName(shellCatalog_, runningShellId_), pageColumns_, pageRows_) : event.message,
-        event.state == SessionState::Error);
+            runningStatus(shellDisplayName(shellCatalog_, runningShellId_), pageColumns_, pageRows_) : event.message);
     sendState(event.generation, event.state, event.message);
     if (restartPending_ && (event.state == SessionState::NoSession ||
         event.state == SessionState::Exited || event.state == SessionState::Error)) {
@@ -596,7 +623,7 @@ bool TerminalPanel::beginDiscovery(std::uint64_t generation, std::uint16_t colum
         pendingDirectoryCandidates_.reset();
         pendingDirectoryKey_.clear();
     } else if (!snapshotDirectoryCandidates(explicitDirectory, candidates)) {
-        setStatus(L"Unable to capture the current Notepad++ file location.", true);
+        setStatus(L"Unable to capture the current Notepad++ file location.");
         updateButtons();
         return false;
     }
@@ -608,16 +635,14 @@ bool TerminalPanel::beginDiscovery(std::uint64_t generation, std::uint16_t colum
     request.candidates = std::move(candidates);
     std::wstring error;
     if (!discovery_.start(request, error)) {
-        setStatus(error.empty() ? L"Shell discovery could not start." : error, true);
+        setStatus(error.empty() ? L"Shell discovery could not start." : error);
         updateButtons();
         return false;
     }
     discoveryPending_ = true;
-    discoveryRefresh_ = request.refreshCatalog;
     discoveryGeneration_ = generation;
     discoveryColumns_ = columns;
     discoveryRows_ = rows;
-    discoveryExplicitDirectory_ = explicitDirectory;
     pageColumns_ = columns;
     pageRows_ = rows;
     if (!discoveryOnly_) visibleState_ = SessionState::Starting;
@@ -636,7 +661,6 @@ void TerminalPanel::finishDiscovery()
     discoveryPending_ = false;
     discoveryOnly_ = false;
     discoveryGeneration_ = 0;
-    discoveryExplicitDirectory_.clear();
     if (shuttingDown_.load() || generation != pageGeneration_) return;
     if (!discoveryOnly && result.error.empty()) {
         for (const ShellInfo& shell : result.catalog) {
@@ -653,7 +677,7 @@ void TerminalPanel::finishDiscovery()
     }
     if (discoveryOnly) {
         if (result.error.empty()) setStatus(L"Shell catalog refreshed.");
-        else setStatus(result.error, true);
+        else setStatus(result.error);
         updateButtons();
         return;
     }
@@ -662,7 +686,7 @@ void TerminalPanel::finishDiscovery()
         visibleState_ = SessionState::Error;
         const std::wstring error = result.error.empty() ?
             L"No usable shell or working directory was found." : result.error;
-        setStatus(error, true);
+        setStatus(error);
         sendState(generation, SessionState::Error, error);
         updateButtons();
         return;
@@ -678,7 +702,7 @@ void TerminalPanel::finishDiscovery()
     std::wstring error;
     if (!session_.start(options, error)) {
         visibleState_ = SessionState::Error;
-        setStatus(error, true);
+        setStatus(error);
         sendState(generation, SessionState::Error, error);
         updateButtons();
         return;
@@ -725,9 +749,6 @@ void TerminalPanel::captureDirectorySnapshot(const std::wstring& explicitDirecto
 
 std::wstring TerminalPanel::activeFilePath() const
 {
-    int currentView = 0;
-    (void)::SendMessageW(nppWindow_, NPPM_GETCURRENTSCINTILLA, 0,
-        reinterpret_cast<LPARAM>(&currentView));
     return queryNotepadPath(nppWindow_, NPPM_GETFULLCURRENTPATH);
 }
 
@@ -760,7 +781,7 @@ void TerminalPanel::loadSettings()
     settings_ = loaded.value;
     selectedShellId_ = settings_.defaultShell;
     if (loaded.malformed && !loaded.error.empty()) {
-        setStatus(L"Settings were invalid; safe defaults are in use until you save them.", true);
+        setStatus(L"Settings were invalid; safe defaults are in use until you save them.");
     }
 }
 
@@ -823,6 +844,7 @@ void TerminalPanel::switchShell(const std::wstring& shellId)
         captureDirectorySnapshot({});
         clearPendingExit();
         bridge_.cancel();
+        inputPumpBurstDeadline_ = 0;
         restartPending_ = true;
         session_.requestStop(StopReason::Restart);
         startSessionPump();
@@ -878,7 +900,7 @@ void TerminalPanel::openTerminalHere()
     const std::wstring currentFile = activeFilePath();
     const std::wstring directory = parentDirectory(currentFile);
     if (directory.empty() || !isAbsoluteWindowsPath(directory)) {
-        setStatus(L"Open Terminal Here requires a saved file.", true);
+        setStatus(L"Open Terminal Here requires a saved file.");
         display(true);
         return;
     }
@@ -895,6 +917,7 @@ void TerminalPanel::openTerminalHere()
         discoveryPending_ = false;
         clearPendingExit();
         bridge_.cancel();
+        inputPumpBurstDeadline_ = 0;
         releaseWebViewAfterStop_ = false;
         if (session_.hasProcess() || session_.hasPendingWork()) {
             restartPending_ = true;
@@ -929,10 +952,12 @@ void TerminalPanel::restartSession()
     }
     clearPendingExit();
     bridge_.cancel();
+    inputPumpBurstDeadline_ = 0;
     restartPending_ = true;
     if (session_.state() == SessionState::Running || session_.state() == SessionState::Starting ||
         session_.hasProcess()) {
         session_.requestStop(StopReason::Restart);
+        startSessionPump();
     } else {
         restartPending_ = false;
         if (ensureWebView()) sendInit();
@@ -949,6 +974,7 @@ void TerminalPanel::killSession(StopReason reason)
     }
     clearPendingExit();
     bridge_.cancel();
+    inputPumpBurstDeadline_ = 0;
     restartPending_ = false;
     // An accepted Kill abandons any serialized Open Here request and the
     // snapshot captured for it.  Leaving either value behind would let a
@@ -962,6 +988,7 @@ void TerminalPanel::killSession(StopReason reason)
     if (session_.state() == SessionState::Running || session_.state() == SessionState::Starting ||
         session_.hasProcess()) {
         session_.requestStop(reason);
+        startSessionPump();
     } else {
         bridge_.clear();
         stopSessionPump();
@@ -980,13 +1007,28 @@ void TerminalPanel::killSession(StopReason reason)
 void TerminalPanel::startSessionPump()
 {
     if (_hSelf && !shuttingDown_.load()) {
-        ::SetTimer(_hSelf, kSessionPumpTimer, kSessionPumpIntervalMs, nullptr);
+        const ULONGLONG now = ::GetTickCount64();
+        if (inputPumpBurstDeadline_ != 0 && now >= inputPumpBurstDeadline_) {
+            inputPumpBurstDeadline_ = 0;
+        }
+        const UINT interval = inputPumpBurstDeadline_ != 0 ? kInputPumpIntervalMs :
+            (isVisible() ? kSessionPumpIntervalMs : kHiddenSessionPumpIntervalMs);
+        ::SetTimer(_hSelf, kSessionPumpTimer, interval, nullptr);
+    }
+}
+
+void TerminalPanel::startInputPumpBurst()
+{
+    if (_hSelf && !shuttingDown_.load() && isVisible()) {
+        inputPumpBurstDeadline_ = ::GetTickCount64() + kInputPumpBurstDurationMs;
+        startSessionPump();
     }
 }
 
 void TerminalPanel::stopSessionPump()
 {
     if (_hSelf) ::KillTimer(_hSelf, kSessionPumpTimer);
+    inputPumpBurstDeadline_ = 0;
 }
 
 void TerminalPanel::clearSessionView()
@@ -994,11 +1036,10 @@ void TerminalPanel::clearSessionView()
     sendClear();
 }
 
-void TerminalPanel::setStatus(const std::wstring& text, bool error)
+void TerminalPanel::setStatus(const std::wstring& text)
 {
     if (statusLabel_) {
         ::SetWindowTextW(statusLabel_, text.c_str());
-        (void)error;
         ::InvalidateRect(statusLabel_, nullptr, TRUE);
     }
 }
@@ -1122,19 +1163,19 @@ void TerminalPanel::handleProtocol(const std::string& jsonText)
         if (data.empty() || data.size() > kMaxInputBytes) return;
         const std::wstring text = utf8ToWide(data);
         if (text.empty() || text.size() > kMaxInputBytes / sizeof(wchar_t)) return;
-        if (!copyClipboardText(_hSelf, text)) setStatus(L"Unable to copy the terminal selection.", true);
+        if (!copyClipboardText(_hSelf, text)) setStatus(L"Unable to copy the terminal selection.");
         return;
     }
 
     if (type == "clipboardRead") {
         std::wstring text;
         if (!readClipboardText(text)) {
-            setStatus(L"Unable to read Unicode text from the clipboard.", true);
+            setStatus(L"Unable to read Unicode text from the clipboard.");
             return;
         }
         const std::string data = wideToUtf8(text);
         if (data.empty() || data.size() > kMaxInputBytes) {
-            setStatus(L"Clipboard text is too large (maximum 64 KiB).", true);
+            setStatus(L"Clipboard text is too large (maximum 64 KiB).");
             return;
         }
         const nlohmann::json response = { {"type", "clipboard"},
@@ -1164,8 +1205,14 @@ void TerminalPanel::handleProtocol(const std::string& jsonText)
 
     if (type == "ack") {
         std::uint32_t id = 0;
-        if (getUnsigned(value, "id", id)) bridge_.acknowledge(generation, id);
+        if (getUnsigned(value, "id", id)) {
+            bridge_.acknowledge(generation, id);
+#ifdef NPPTERMINAL_TESTS
+            testLastOutputAckId_ = id;
+#endif
+        }
         pumpOutput();
+        if (outputBackpressured_) postSessionPump();
         return;
     }
 
@@ -1180,7 +1227,9 @@ void TerminalPanel::handleProtocol(const std::string& jsonText)
         if (visibleState_ == SessionState::Running) {
             resized = session_.resize(pageColumns_, pageRows_);
             if (!resized) {
-                setStatus(L"The terminal resize was rejected by ConPTY.", true);
+                setStatus(L"The terminal resize was rejected by ConPTY.");
+            } else {
+                postSessionPump();
             }
         }
         if (resized && visibleState_ == SessionState::Running) {
@@ -1199,11 +1248,14 @@ void TerminalPanel::handleProtocol(const std::string& jsonText)
         const bool decoded = type == "binary" ? utf8ByteStringToBytes(data, bytes) :
             (bytes.assign(data.begin(), data.end()), true);
         if (!decoded || bytes.empty() || bytes.size() > kMaxInputBytes) {
-            setStatus(L"Input was rejected because it exceeds the terminal input limit.", true);
+            setStatus(L"Input was rejected because it exceeds the terminal input limit.");
             return;
         }
         if (!session_.write(generation, id, bytes)) {
-            setStatus(L"Input is temporarily paused while the shell catches up.", true);
+            setStatus(L"Input is temporarily paused while the shell catches up.");
+        } else {
+            startInputPumpBurst();
+            postSessionPump();
         }
         return;
     }
@@ -1250,6 +1302,11 @@ INT_PTR CALLBACK TerminalPanel::run_dlgProc(UINT message, WPARAM wParam, LPARAM 
             layoutControls();
             return TRUE;
 
+        case WM_SHOWWINDOW:
+            if (!wParam) inputPumpBurstDeadline_ = 0;
+            if (session_.hasPendingWork() || discoveryPending_) startSessionPump();
+            return TRUE;
+
         case WM_SETFOCUS:
             if (webView_.isReady() && pageGeneration_ != 0) {
                 const nlohmann::json value = { {"type", "focus"},
@@ -1261,9 +1318,21 @@ INT_PTR CALLBACK TerminalPanel::run_dlgProc(UINT message, WPARAM wParam, LPARAM 
         case WM_TIMER:
             if (wParam == kSessionPumpTimer) {
                 pumpSession();
+                if (inputPumpBurstDeadline_ != 0 &&
+                    ::GetTickCount64() >= inputPumpBurstDeadline_) {
+                    inputPumpBurstDeadline_ = 0;
+                    if (session_.hasPendingWork() || pendingExit_ || discoveryPending_) {
+                        startSessionPump();
+                    }
+                }
                 return TRUE;
             }
             break;
+
+        case kSessionPumpMessage:
+            sessionPumpPosted_ = false;
+            pumpSession();
+            return TRUE;
 
         case WM_COMMAND:
             if (HIWORD(wParam) == CBN_SELCHANGE && LOWORD(wParam) == IDC_TERMINAL_SHELL) {
@@ -1347,6 +1416,9 @@ INT_PTR CALLBACK TerminalPanel::run_dlgProc(UINT message, WPARAM wParam, LPARAM 
         {
             std::unique_ptr<AckEvent> event(reinterpret_cast<AckEvent*>(lParam));
             if (event && event->generation == pageGeneration_ && webView_.isReady()) {
+#ifdef NPPTERMINAL_TESTS
+                testLastInputAckId_ = event->id;
+#endif
                 const nlohmann::json value = {{"type", "inputAck"},
                     {"generation", event->generation}, {"id", event->id}};
                 webView_.postJson(jsonWide(value));

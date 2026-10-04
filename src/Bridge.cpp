@@ -1,7 +1,5 @@
 #include "Bridge.h"
 
-#include <chrono>
-
 namespace nppterminal {
 
 void BoundedOutputBridge::attachDispatcher(HWND window, UINT message)
@@ -23,7 +21,6 @@ void BoundedOutputBridge::beginGeneration(std::uint64_t generation)
         inFlightBytes_ = 0;
         dispatchPosted_.store(false);
     }
-    spaceAvailable_.notify_all();
 }
 
 bool BoundedOutputBridge::tryPush(OutputChunk chunk)
@@ -43,30 +40,10 @@ bool BoundedOutputBridge::tryPush(OutputChunk chunk)
     return true;
 }
 
-bool BoundedOutputBridge::push(OutputChunk chunk, const std::atomic_bool& cancelled)
-{
-    if (chunk.data.empty() || chunk.data.size() > kQueueLimitBytes) return false;
-
-    {
-        std::unique_lock<std::mutex> lock(mutex_);
-        if (chunk.generation != generation_) return false;
-        while (!cancelled_ && !cancelled.load() &&
-            queuedBytes_ + chunk.data.size() > kQueueLimitBytes) {
-            spaceAvailable_.wait_for(lock, std::chrono::milliseconds(100));
-        }
-        if (cancelled_ || cancelled.load() || chunk.generation != generation_) return false;
-        queuedBytes_ += chunk.data.size();
-        queue_.push_back(std::move(chunk));
-    }
-    notifyDispatcher();
-    return true;
-}
-
 std::optional<OutputChunk> BoundedOutputBridge::takeForSend()
 {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (queue_.empty() || inFlightBytes_ >= kInFlightLimitBytes) return std::nullopt;
-    if (inFlightBytes_ + queue_.front().data.size() > kInFlightLimitBytes) return std::nullopt;
+    if (!queueHeadFitsLocked()) return std::nullopt;
 
     OutputChunk chunk = std::move(queue_.front());
     queue_.pop_front();
@@ -91,7 +68,6 @@ void BoundedOutputBridge::returnUnsent(OutputChunk chunk)
             queue_.push_front(std::move(chunk));
         }
     }
-    spaceAvailable_.notify_all();
     notifyDispatcher();
 }
 
@@ -105,8 +81,13 @@ void BoundedOutputBridge::acknowledge(std::uint64_t generation, std::uint64_t id
         inFlightBytes_ -= it->second;
         inFlight_.erase(it);
     }
-    spaceAvailable_.notify_all();
     notifyDispatcher();
+}
+
+bool BoundedOutputBridge::queueHeadFitsLocked() const
+{
+    return !queue_.empty() && inFlightBytes_ < kInFlightLimitBytes &&
+        queue_.front().data.size() <= kInFlightLimitBytes - inFlightBytes_;
 }
 
 void BoundedOutputBridge::onDispatchHandled()
@@ -120,7 +101,7 @@ void BoundedOutputBridge::onDispatchHandled()
         // between the UI pump's last pop and clearing dispatchPosted_.
         std::lock_guard<std::mutex> lock(mutex_);
         dispatchPosted_.store(false);
-        if (!queue_.empty() && !cancelled_ && inFlightBytes_ < kInFlightLimitBytes) {
+        if (!cancelled_ && queueHeadFitsLocked()) {
             dispatchPosted_.store(true);
             dispatcher = dispatcher_;
             message = dispatchMessage_;
@@ -142,7 +123,6 @@ void BoundedOutputBridge::cancel()
         queuedBytes_ = 0;
         inFlightBytes_ = 0;
     }
-    spaceAvailable_.notify_all();
 }
 
 void BoundedOutputBridge::clear()
@@ -154,7 +134,6 @@ void BoundedOutputBridge::clear()
         queuedBytes_ = 0;
         inFlightBytes_ = 0;
     }
-    spaceAvailable_.notify_all();
 }
 
 std::size_t BoundedOutputBridge::queuedBytes() const
@@ -181,7 +160,7 @@ void BoundedOutputBridge::notifyDispatcher()
     UINT message = 0;
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        if (dispatchPosted_.load()) return;
+        if (dispatchPosted_.load() || cancelled_ || !queueHeadFitsLocked()) return;
         dispatchPosted_.store(true);
         dispatcher = dispatcher_;
         message = dispatchMessage_;

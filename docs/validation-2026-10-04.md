@@ -1,6 +1,14 @@
 # Continuation validation, 4 October 2026
 
-## Current continuation, 0.3.26 — 4 October 2026
+## About feature, 0.5.0 — 4 October 2026
+
+The official Release x64 build passed with `scripts/build.ps1 -VersionBump Minor`, including dependency bootstrap and web asset generation. It reserved version **0.5.0**. Standard validation passed **19 of 19 groups**, ending at `2026-10-04T14:15:53.3005797Z`; logs and exact exit results are in `out/validation/0.5.0-20261004T141427974Z/summary.json`.
+
+A focused smoke harness loaded the built DLL, verified all four registered menu commands, opened About, checked the product name, version, description, author and SysLink anchor markup, and dismissed the dialog with Close, Escape and window close. The initial harness lacked the Common Controls v6 activation context supplied by Notepad++; after adding that context, all checks passed. The harness and manifest are retained in `out/about-smoke.ps1` and `out/about-smoke.manifest`. Actual browser launch, full Notepad++ interaction, dark mode and DPI appearance were not exercised by this harness; manual About steps are in `manual-tests.md`.
+
+The combined source changes received a read-only review with no remaining blocking findings. The 30-minute stream and existing manual/resource release gates were not rerun; historical audit evidence remains in `audit-remediation-2026-10-04.md`.
+
+## Historical continuation, 0.3.26 — 4 October 2026
 
 Development candidate **0.3.26** restores Ctrl+C by removing CREATE_NEW_PROCESS_GROUP from both broker and shell creation. The dedicated ConPTY and kill-on-close jobs retain session containment. A real native signal regression failed before the complete fix and passed afterward; the actual portable Notepad++ terminal then interrupted Python with KeyboardInterrupt and interrupted PowerShell Start-Sleep, returning to usable prompts.
 

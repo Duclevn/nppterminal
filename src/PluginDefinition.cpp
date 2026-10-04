@@ -2,6 +2,10 @@
 
 #include "TerminalPanel.h"
 #include "menuCmdID.h"
+#include "resource.h"
+
+#include <commctrl.h>
+#include <shellapi.h>
 
 FuncItem funcItem[nbFunc]{};
 NppData nppData{};
@@ -14,6 +18,42 @@ HMODULE g_module = nullptr;
 // only delete; process teardown reclaims the remaining OS resources.
 nppterminal::TerminalPanel* g_panel = nullptr;
 ShortcutKey g_toggleShortcut{true, true, false, 'T'};
+
+constexpr wchar_t kAuthorWebsite[] = L"https://ducle.uk";
+
+void openAuthorWebsite(HWND dialog)
+{
+    (void)::ShellExecuteW(dialog, L"open", kAuthorWebsite, nullptr, nullptr, SW_SHOWNORMAL);
+}
+
+INT_PTR CALLBACK aboutDialogProc(HWND dialog, UINT message, WPARAM wParam, LPARAM lParam)
+{
+    switch (message) {
+    case WM_INITDIALOG:
+        return TRUE;
+    case WM_COMMAND:
+        if (LOWORD(wParam) == IDOK || LOWORD(wParam) == IDCANCEL) {
+            ::EndDialog(dialog, LOWORD(wParam));
+            return TRUE;
+        }
+        break;
+    case WM_NOTIFY: {
+        const auto* notification = reinterpret_cast<const NMHDR*>(lParam);
+        if (notification && notification->idFrom == IDC_ABOUT_WEBSITE &&
+            (notification->code == NM_CLICK || notification->code == NM_RETURN)) {
+            openAuthorWebsite(dialog);
+            return TRUE;
+        }
+        break;
+    }
+    case WM_CLOSE:
+        ::EndDialog(dialog, IDCANCEL);
+        return TRUE;
+    default:
+        break;
+    }
+    return FALSE;
+}
 
 } // namespace
 
@@ -44,6 +84,7 @@ void commandMenuInit()
     setCommand(0, L"Toggle Terminal", toggleTerminal, &g_toggleShortcut, false);
     setCommand(1, L"Terminal Settings...", terminalSettings, nullptr, false);
     setCommand(2, L"Open Terminal Here", openTerminalHere, nullptr, false);
+    setCommand(3, L"About...", aboutPlugin, nullptr, false);
 }
 
 void commandMenuCleanUp()
@@ -82,6 +123,15 @@ void openTerminalHere()
             funcItem[0]._cmdID);
     }
     g_panel->openTerminalHere();
+}
+
+void aboutPlugin()
+{
+    if (!g_module) return;
+    INITCOMMONCONTROLSEX commonControls{sizeof(commonControls), ICC_LINK_CLASS};
+    (void)::InitCommonControlsEx(&commonControls);
+    (void)::DialogBoxParamW(g_module, MAKEINTRESOURCEW(IDD_ABOUT_DIALOG),
+        nppData._nppHandle, &aboutDialogProc, 0);
 }
 
 void ensureTerminalPanel()

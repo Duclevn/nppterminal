@@ -40,7 +40,8 @@
       <PreprocessorDefinitions>WIN32;_WINDOWS;UNICODE;_UNICODE;_WIN32_WINNT=0x0A00;WINVER=0x0A00;WIN32_LEAN_AND_MEAN;NOMINMAX;NPPTERMINAL_TESTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>$(ProjectDir)src;$(ProjectDir)third_party\notepadpp;$(ProjectDir)third_party\json\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
-      <TreatWarningAsError>false</TreatWarningAsError>
+      <TreatWarningAsError Condition="'$(Configuration)'=='Release'">true</TreatWarningAsError>
+      <TreatWarningAsError Condition="'$(Configuration)'=='Debug'">false</TreatWarningAsError>
       <ConformanceMode>true</ConformanceMode>
       <RuntimeLibrary Condition="'$(Configuration)'=='Debug'">MultiThreadedDebug</RuntimeLibrary>
       <RuntimeLibrary Condition="'$(Configuration)'=='Release'">MultiThreaded</RuntimeLibrary>

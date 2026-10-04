@@ -86,6 +86,7 @@ $fileSpecs = @(
     [pscustomobject]@{ Zip = 'NppTerminal/THIRD_PARTY_NOTICES.md'; SourceRelative = 'THIRD_PARTY_NOTICES.md'; Kind = 'DistributedDocument' },
     [pscustomobject]@{ Zip = 'NppTerminal/dependencies.lock.json'; SourceRelative = 'dependencies.lock.json'; Kind = 'DistributedDocument' },
     [pscustomobject]@{ Zip = 'NppTerminal/VERSION'; SourceRelative = 'VERSION'; Kind = 'VersionText' },
+    [pscustomobject]@{ Zip = 'NppTerminal/docs/audit-remediation-2026-10-04.md'; SourceRelative = 'docs/audit-remediation-2026-10-04.md'; Kind = 'DistributedDocument' },
     [pscustomobject]@{ Zip = 'NppTerminal/docs/compatibility.md'; SourceRelative = 'docs/compatibility.md'; Kind = 'DistributedDocument' },
     [pscustomobject]@{ Zip = 'NppTerminal/docs/implementation-status.md'; SourceRelative = 'docs/implementation-status.md'; Kind = 'DistributedDocument' },
     [pscustomobject]@{ Zip = 'NppTerminal/docs/manual-tests.md'; SourceRelative = 'docs/manual-tests.md'; Kind = 'DistributedDocument' },
@@ -100,8 +101,8 @@ $fileSpecs = @(
 )
 
 $expectedNames = @($fileSpecs | ForEach-Object { $_.Zip })
-if ($expectedNames.Count -ne 26) {
-    throw "The package inspector manifest must contain exactly 26 files; found $($expectedNames.Count)."
+if ($expectedNames.Count -ne 27) {
+    throw "The package inspector manifest must contain exactly 27 files; found $($expectedNames.Count)."
 }
 
 $archive = $null
@@ -129,7 +130,7 @@ try {
     if ($missingNames.Count -gt 0 -or $unexpectedNames.Count -gt 0 -or $actualNames.Count -ne $expectedNames.Count) {
         $missingText = if ($missingNames.Count -gt 0) { $missingNames -join ', ' } else { '(none)' }
         $unexpectedText = if ($unexpectedNames.Count -gt 0) { $unexpectedNames -join ', ' } else { '(none)' }
-        throw "The package must contain exactly the 26-file allowlist. Missing: $missingText. Unexpected (including test/runtime/node/shell artifacts): $unexpectedText. Entry count: $($actualNames.Count)."
+        throw "The package must contain exactly the 27-file allowlist. Missing: $missingText. Unexpected (including test/runtime/node/shell artifacts): $unexpectedText. Entry count: $($actualNames.Count)."
     }
 
     $dllPath = Join-Path $buildPath 'NppTerminal.dll'
@@ -196,7 +197,7 @@ try {
         ArchiveBytes = $archiveSize
         ArchiveSha256 = $archiveHash
         FileCount = $contents.Count
-        ExpectedFileCount = 26
+        ExpectedFileCount = 27
         VersionTextMatch = $versionTextMatch
         NativeBinaries = @(
             [pscustomobject]@{ Path = 'NppTerminal/NppTerminal.dll'; EmbeddedVersion = $dllVersion.String; SourceSha256 = (Get-SourceSha256 -Path $dllPath); ZipSha256 = ($contents | Where-Object Path -ceq 'NppTerminal/NppTerminal.dll').Sha256 },

@@ -1,6 +1,20 @@
 # Implementation status
 
-## Current continuation, 0.3.26 — 4 October 2026
+## Current About feature, 0.5.0 — 4 October 2026
+
+Version **0.5.0** adds a native About dialog with version, brief description, author Duc Le and a clickable website. The official Release x64 build and all 19 standard validation groups passed; the About content/menu/close smoke checks also passed. See [the dated validation record](validation-2026-10-04.md) for evidence and limits. Existing manual/resource release gates remain open.
+
+## Historical remediation, 0.4.9 — 4 October 2026
+
+The remediation handoff reported version **0.4.9**, the final handoff candidate. A fresh, hash-verified 109-file corresponding-source/bootstrap build passed; the input comparison is `out/validation/audit-remediation-20261004/clean-build-input-comparison-0.4.9.json`. Standard validation passed 19 of 19 groups with exit 0 in `out/validation/0.4.9-20261004T133857640Z/summary.json`, ending at `2026-10-04T13:40:24.5776569Z`. The [audit remediation record](audit-remediation-2026-10-04.md) is the finding-by-finding evidence and limits.
+
+F-01, F-04, F-05, F-06 and F-07 have final native/frontend passes. F-03's bounded transport and panel lifecycle checks passed: the visible owned fake-host panel transferred 2,097,609 bytes in 467 ms (4.28359 MiB/s); quiet echo/ack p50 was 30/16 ms and p95 33/33 ms across 20 samples, with render p50/p95 33/35 ms; streaming child responses measured output p50/p95 15/32 ms, ack 15/18 ms and render 30/33 ms; hidden mode used two polls over 250 ms. F-04 covered 20 standard claimant pairs plus 100 focused pairs. F-06's exact 40,000-WCHAR (about 80 KiB) HKCU pre-allocation fixture passed.
+
+F-02 remains open and deferred by the user's decision to keep WebView2 and leave the 150 MiB active-memory gate open. The settled 0.4.3 hardware samples were 165.92, 166.25 and 169.04 MiB; browser readings were 168.11–171.20 MiB, with shell 27.81–27.86 MiB and ConPTY 1.36 MiB reported separately. The final 0.4.9 reference used a matching 1300x1600 stock baseline of 71,962,624 bytes, with all three handoff baseline samples matching. Never-open visible idle dock was 6.25 MiB below stock (measurement noise); after hide, idle dock with no heavy components was +1.10 MiB with zero WebView, broker, ConPTY or shell children, supporting the ≤5 MiB never-open gate for that full-viewport match. Final active 80x24 captures at 13:45:46, 13:46:26 and 13:47:29 measured 177.93, 178.16 and 178.12 MiB, above budget; browser was 180,617,216–180,789,248 bytes (about 172.25–172.41 MiB), broker 1.96–1.99 MiB, shell about 27.08 MiB and ConPTY 1.37 MiB. The initial hidden CPU capture was confounded by foreground/painting activity. No `--disable-gpu` or InPrivate shipping change was adopted.
+
+The panel evidence uses a visible owned fake host, the native protocol path and actual shipping xterm assets; it is not a physical keyboard or full Notepad++ operator test. The final reference was Windows 11 build 26300.9457, Notepad++ 8.9.8.1, and WebView2 154.0.4258.53. Full IME, AltGr, DPI, accessibility, clean-machine, protected-installation and related manual checks remain open. Raw evidence is under `out/validation/audit-remediation-20261004`; the final package has 27 allowlisted files, with package/source inspection and exact hashes recorded in `artifact-handoff-0.4.9.json` there.
+
+## Historical 0.3.26 continuation — 4 October 2026
 
 Development candidate **0.3.26** restores Ctrl+C by removing CREATE_NEW_PROCESS_GROUP from both broker and shell creation. The dedicated ConPTY and kill-on-close jobs retain session containment. A real native signal regression failed before the complete fix and passed afterward; the actual portable Notepad++ terminal then interrupted Python with KeyboardInterrupt and interrupted PowerShell Start-Sleep, returning to usable prompts.
 

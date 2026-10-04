@@ -3,6 +3,10 @@
 #include <string>
 #include <vector>
 
+#ifdef NPPTERMINAL_TESTS
+#include <windows.h>
+#endif
+
 namespace nppterminal {
 
 struct ShellInfo {
@@ -23,5 +27,11 @@ bool verifyWslCapability(const std::wstring& applicationName, std::wstring& erro
 
 bool isAbsoluteWindowsPath(const std::wstring& path);
 bool isUncWindowsPath(const std::wstring& path);
+
+#ifdef NPPTERMINAL_TESTS
+// Test seam for exercising the bounded registry read with a controlled value.
+bool readRegistryStringForTest(HKEY root, const wchar_t* keyPath,
+    const wchar_t* valueName, REGSAM view, std::wstring& value);
+#endif
 
 } // namespace nppterminal

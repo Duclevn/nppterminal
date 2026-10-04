@@ -4,8 +4,14 @@
 #include "ShellCatalog.h"
 #include "ShellDiscovery.h"
 
+#include <windows.h>
+
+#include <objbase.h>
+
+#include <iterator>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace nppterminal::tests {
 
@@ -107,6 +113,60 @@ void testShellLaunchPlans()
         !error.empty(), "unsupported shell ID was accepted");
 }
 
+std::wstring uniqueRegistryTestKey()
+{
+    GUID id{};
+    require(SUCCEEDED(::CoCreateGuid(&id)), "CoCreateGuid for registry fixture failed");
+    wchar_t text[64] = {};
+    require(::StringFromGUID2(id, text, static_cast<int>(std::size(text))) > 0,
+        "StringFromGUID2 for registry fixture failed");
+    return L"SOFTWARE\\NppTerminal.Tests.Registry." + std::wstring(text);
+}
+
+struct RegistryFixtureGuard final {
+    std::wstring keyPath;
+    ~RegistryFixtureGuard()
+    {
+        (void)::RegDeleteTreeW(HKEY_CURRENT_USER, keyPath.c_str());
+    }
+};
+
+void testRegistryStringBound()
+{
+    RegistryFixtureGuard fixture{uniqueRegistryTestKey()};
+    HKEY key = nullptr;
+    require(::RegCreateKeyExW(HKEY_CURRENT_USER, fixture.keyPath.c_str(), 0, nullptr,
+        REG_OPTION_NON_VOLATILE, KEY_QUERY_VALUE | KEY_SET_VALUE, nullptr, &key,
+        nullptr) == ERROR_SUCCESS, "registry fixture key creation failed");
+
+    // A reported path longer than the Windows extended-path limit must be
+    // rejected before readRegistryStringForTest sizes a vector from it.
+    const std::vector<wchar_t> oversized(40000, L'X');
+    const DWORD oversizedBytes = static_cast<DWORD>(oversized.size() * sizeof(wchar_t));
+    require(::RegSetValueExW(key, L"InstallPath", 0, REG_SZ,
+        reinterpret_cast<const BYTE*>(oversized.data()), oversizedBytes) == ERROR_SUCCESS,
+        "oversized registry fixture write failed");
+    ::RegCloseKey(key);
+
+    std::wstring value;
+    require(!readRegistryStringForTest(HKEY_CURRENT_USER, fixture.keyPath.c_str(),
+        L"InstallPath", 0, value),
+        "oversized registry string was accepted");
+
+    require(::RegOpenKeyExW(HKEY_CURRENT_USER, fixture.keyPath.c_str(), 0,
+        KEY_SET_VALUE, &key) == ERROR_SUCCESS,
+        "registry fixture reopen failed");
+    const wchar_t validPath[] = L"C:\\Windows";
+    require(::RegSetValueExW(key, L"InstallPath", 0, REG_SZ,
+        reinterpret_cast<const BYTE*>(validPath), sizeof(validPath)) == ERROR_SUCCESS,
+        "valid registry fixture write failed");
+    ::RegCloseKey(key);
+
+    require(readRegistryStringForTest(HKEY_CURRENT_USER, fixture.keyPath.c_str(),
+        L"InstallPath", 0, value) && value == validPath,
+        "bounded registry reader rejected a valid string");
+}
+
 } // namespace
 
 void runShellCatalogTests()
@@ -115,6 +175,7 @@ void runShellCatalogTests()
     testDirectoryPriorityAndFallback();
     testCmdUncPolicy();
     testShellLaunchPlans();
+    testRegistryStringBound();
 }
 
 } // namespace nppterminal::tests

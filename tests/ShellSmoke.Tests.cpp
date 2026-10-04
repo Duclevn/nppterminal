@@ -360,7 +360,7 @@ void testShell(const std::wstring& id, const ShellDiscoveryResult& launch,
     require(broker.stopped() && shell.stopped(), "owned Windows processes survived stop");
     if (id == L"wsl") {
         bool gone = false;
-        const ULONGLONG deadline = ::GetTickCount64() + 10000;
+        const ULONGLONG linuxDeadline = ::GetTickCount64() + 10000;
         do {
             const std::string report = runWslProbe(launch, identityScript(linuxProcesses, false));
             gone = true;
@@ -370,7 +370,7 @@ void testShell(const std::wstring& id, const ShellDiscoveryResult& launch,
                     report.find("NPP_UNKNOWN|" + process.kind) == std::string::npos;
             }
             if (!gone) ::Sleep(100);
-        } while (!gone && ::GetTickCount64() < deadline);
+        } while (!gone && ::GetTickCount64() < linuxDeadline);
         require(gone, "WSL attached Linux shell/foreground/background process survived stop");
         linuxGuard.verified = true;
         std::cout << "SHELL_SMOKE PASS wsl-attached-linux-shell-foreground-background-stop\n";

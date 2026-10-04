@@ -3,7 +3,6 @@
 #include <windows.h>
 
 #include <atomic>
-#include <condition_variable>
 #include <cstdint>
 #include <deque>
 #include <mutex>
@@ -34,7 +33,6 @@ public:
     // acknowledgements. A false result means that this chunk must remain at
     // the session boundary for a later poll; it is not a session cancellation.
     bool tryPush(OutputChunk chunk);
-    bool push(OutputChunk chunk, const std::atomic_bool& cancelled);
     std::optional<OutputChunk> takeForSend();
     void returnUnsent(OutputChunk chunk);
     void acknowledge(std::uint64_t generation, std::uint64_t id);
@@ -46,10 +44,10 @@ public:
     std::uint64_t generation() const;
 
 private:
+    bool queueHeadFitsLocked() const;
     void notifyDispatcher();
 
     mutable std::mutex mutex_;
-    std::condition_variable spaceAvailable_;
     std::deque<OutputChunk> queue_;
     std::unordered_map<std::uint64_t, std::size_t> inFlight_;
     std::size_t queuedBytes_ = 0;

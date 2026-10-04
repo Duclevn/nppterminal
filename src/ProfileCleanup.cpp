@@ -29,6 +29,10 @@ constexpr std::size_t kMaxCleanupDepth = 32;
 constexpr std::size_t kMaxRecoveryCandidates = 64;
 constexpr DWORD kCleanupRetryCount = 4;
 constexpr DWORD kCleanupRetryDelayMs = 25;
+// A contained reader can outlive the lease close briefly.  Keep the claim
+// window bounded at two seconds without extending the ordinary tree-delete
+// retries or the helper watchdog.
+constexpr DWORD kCleanupClaimRetryCount = 80;
 constexpr DWORD kCleanupDeadlineMs = 30000;
 constexpr DWORD kCleanupWatchdogMs = 45000;
 constexpr std::uint32_t kProcessSnapshotComplete = 0x1u;
@@ -616,6 +620,43 @@ bool acquireLeaseFile(const std::wstring& rootPath, HANDLE& lease, std::wstring&
     return acquireLeasePath(rootPath + L"\\" + kLeaseName, lease, error, allowDeleteShare);
 }
 
+class CleanupReservation final {
+public:
+    CleanupReservation() = default;
+    CleanupReservation(const CleanupReservation&) = delete;
+    CleanupReservation& operator=(const CleanupReservation&) = delete;
+
+    ~CleanupReservation()
+    {
+        if (validHandle(handle_)) {
+            (void)::ReleaseMutex(handle_);
+            closeHandle(handle_);
+        }
+    }
+
+    bool acquire(const std::wstring& instanceId,
+        const std::array<std::uint8_t, kNonceBytes>& nonce, std::wstring& error)
+    {
+        const std::wstring name = L"Local\\NppTerminal.ProfileCleanup.v1." +
+            instanceId + L"." + nonceHex(nonce);
+        ::SetLastError(ERROR_SUCCESS);
+        handle_ = ::CreateMutexW(nullptr, TRUE, name.c_str());
+        if (!validHandle(handle_)) {
+            error = L"Unable to reserve the WebView cleanup identity: " + win32Error();
+            return false;
+        }
+        if (::GetLastError() == ERROR_ALREADY_EXISTS) {
+            closeHandle(handle_);
+            error = L"The WebView cleanup identity is already reserved.";
+            return false;
+        }
+        return true;
+    }
+
+private:
+    HANDLE handle_ = nullptr;
+};
+
 bool isSafeChild(const std::filesystem::path& root, const std::filesystem::path& child)
 {
     std::wstring canonicalRoot;
@@ -856,6 +897,8 @@ int cleanupProfile(const std::wstring& parentPath, const std::wstring& instanceI
     if (!readMarker(root, marker, error)) return 2;
     if (marker.phase != CleanupPhase::Released ||
         !validateRoot(parent, instanceId, root, marker, nonce, error)) return 2;
+    CleanupReservation reservation;
+    if (!reservation.acquire(instanceId, nonce, error)) return 2;
     for (const ProcessIdentity& process : marker.browserProcesses) {
         if (deadline.expired()) {
             error = L"The WebView cleanup deadline expired while checking processes.";
@@ -886,13 +929,14 @@ int cleanupProfile(const std::wstring& parentPath, const std::wstring& instanceI
     // Windows rejects renaming a directory while a handle to a contained file
     // is open, even when that handle allows FILE_SHARE_DELETE.  The marker,
     // nonce, and root identity have been revalidated while the lease was held;
-    // after this close the unique instance directory is claimed by whichever
-    // concurrent helper wins MoveFileEx.  The host never reopens a Released
-    // profile, and a losing helper leaves the marked root available for retry.
+    // the per-profile reservation keeps another cleanup helper from acquiring
+    // the lease during this close-and-claim handoff.  The host never reopens a
+    // Released profile, and a failed claim leaves the marked root available
+    // for retry.
     closeHandle(lease);
     bool claimed = false;
     DWORD claimError = ERROR_SUCCESS;
-    for (DWORD attempt = 0; attempt != kCleanupRetryCount; ++attempt) {
+    for (DWORD attempt = 0; attempt != kCleanupClaimRetryCount; ++attempt) {
         if (deadline.expired()) break;
         if (::MoveFileExW(root.c_str(), tombstone.c_str(), MOVEFILE_WRITE_THROUGH)) {
             claimed = true;
@@ -903,7 +947,7 @@ int cleanupProfile(const std::wstring& parentPath, const std::wstring& instanceI
         // lease closes. Retry only transient sharing/access failures; the
         // claimed directory must still pass the identity checks below.
         if (claimError != ERROR_SHARING_VIOLATION && claimError != ERROR_ACCESS_DENIED) break;
-        if (attempt + 1 < kCleanupRetryCount && !deadline.expired()) {
+        if (attempt + 1 < kCleanupClaimRetryCount && !deadline.expired()) {
             ::Sleep(kCleanupRetryDelayMs);
         }
     }
